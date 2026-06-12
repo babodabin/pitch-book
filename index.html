@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>구종 도감</title>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overflow:hidden; background:#05070c; }
+  body {
+    font-family:-apple-system,'Apple SD Gothic Neo',sans-serif;
+    color:#dfe3e8;
+    touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    display:flex; flex-direction:column;
+    padding-top:max(env(safe-area-inset-top), 10px);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  header {
+    padding:6px 16px 8px 16px;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  header h1 { font-family:'Special Elite', monospace; font-size:22px; font-weight:400; letter-spacing:0.12em; color:#fff; }
+  header .sub { font-size:13px; color:#7a8290; }
+
+  /* 구종 선택 */
+  #pitch-bar {
+    display:flex; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px;
+    -webkit-overflow-scrolling:touch;
+  }
+  #pitch-bar::-webkit-scrollbar { display:none; }
+  .p-chip {
+    flex:0 0 auto;
+    font-size:16px; font-weight:700;
+    padding:10px 16px; border-radius:24px;
+    background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
+  }
+  .p-chip.on { border-color:var(--c); color:var(--c); box-shadow:0 0 10px color-mix(in srgb, var(--c) 50%, transparent); }
+
+  /* 정보 */
+  #info {
+    padding:2px 16px 8px 16px;
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  }
+  #p-name { font-size:24px; font-weight:800; }
+  #p-speed { font-size:16px; color:#8a93a3; font-weight:600; }
+  #p-desc { padding:0 16px 10px 16px; font-size:15px; line-height:1.6; color:#aab2c0; min-height:44px; }
+
+  /* 뷰 탭 */
+  #tabs {
+    display:flex; gap:8px; padding:0 16px 10px 16px;
+  }
+  .tab {
+    flex:1; text-align:center;
+    font-size:16px; font-weight:700;
+    padding:11px 0; border-radius:12px;
+    background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
+  }
+  .tab.on { background:#1b2433; border-color:#5a8fd4; color:#fff; }
+
+  #canvas-box { flex:1; position:relative; margin:0 12px; border-radius:14px; overflow:hidden; border:1.5px solid #222b3a; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+  #controls {
+    display:flex; gap:10px; padding:12px 16px 14px 16px;
+  }
+  #throw-btn {
+    flex:2; font-family:'Special Elite', monospace;
+    font-size:19px; letter-spacing:0.12em;
+    padding:15px 0; border-radius:13px;
+    background:#fff; color:#000; border:none; font-weight:700;
+  }
+  #throw-btn:active { transform:translateY(2px); }
+  #slow-btn {
+    flex:1; font-size:16px; font-weight:700;
+    padding:15px 0; border-radius:13px;
+    background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
+  }
+  #slow-btn.on { border-color:#ffd23b; color:#ffd23b; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PITCH BOOK</h1>
+  <div class="sub">구종 도감 · 우투수 기준</div>
+</header>
+<div id="pitch-bar"></div>
+<div id="info">
+  <div id="p-name"></div>
+  <div id="p-speed"></div>
+</div>
+<div id="p-desc"></div>
+<div id="tabs">
+  <div class="tab on" data-v="front">타자 시점</div>
+  <div class="tab" data-v="side">옆에서</div>
+  <div class="tab" data-v="grip">그립</div>
+</div>
+<div id="canvas-box"><canvas id="cv"></canvas></div>
+<div id="controls">
+  <button id="throw-btn">던지기 ▶</button>
+  <button id="slow-btn">느리게</button>
+</div>
+
+<script>
+(function(){
+  // ───────── 구종 데이터 ─────────
+  // speed: km/h 표기 / dur: 비행시간(ms, 실제 속도감 비례)
+  // breakX: 타자시점 좌우 변화 (+ = 우타자 바깥쪽/좌측으로) / breakY: 낙폭
+  // shape: 'early'(일찍부터 휨) 'late'(마지막에 꺾임) 'gradual'(서서히)
+  // spin: 회전 묘사 / grip: 그립 설명 / fingers: 그립 그림용 손가락 위치
+  const PITCHES=[
+    {key:'4seam', name:'포심 패스트볼', color:'#ffffff', speed:'145~155 km/h', dur:520,
+     breakX:0, breakY:-0.12, shape:'gradual', spinTxt:'강한 백스핀 — 공이 떠오르는 듯한 착시',
+     desc:'야구의 기본. 가장 빠르고 가장 곧게 옵니다. 강한 백스핀 때문에 덜 떨어져서, 타자 눈에는 살짝 떠오르는 것처럼 보입니다.',
+     grip:'검지와 중지를 실밥 두 줄에 가로질러 걸칩니다. 네 개의 실밥(four seam)이 회전하며 공기를 가장 많이 받아 빠르고 곧게 갑니다.',
+     fingers:[[0,-0.45,1.4],[0.38,-0.38,1.4]], thumb:[0,0.62], spin:'back', spinSpd:0.45},
+    {key:'2seam', name:'투심 패스트볼', color:'#cfe8ff', speed:'140~150 km/h', dur:545,
+     breakX:0.35, breakY:0.18, shape:'gradual', spinTxt:'백스핀 + 약간 기울어진 회전축',
+     desc:'포심과 비슷한 속도인데 끝에서 팔 쪽(우투수면 우타자 몸쪽)으로 휘며 가라앉습니다. 땅볼을 유도하는 공.',
+     grip:'검지와 중지를 실밥 두 줄이 좁아지는 곳에 나란히 올립니다(two seam). 회전축이 살짝 기울어 공이 흘러내립니다.',
+     fingers:[[-0.18,-0.42,1.35],[0.18,-0.42,1.35]], thumb:[0,0.62], spin:'back', spinSpd:0.38},
+    {key:'cutter', name:'커터 (컷 패스트볼)', color:'#ffe14d', speed:'138~148 km/h', dur:545,
+     breakX:-0.42, breakY:0.12, shape:'late', spinTxt:'총알 같은 회전, 살짝 기울어짐',
+     desc:'빠르게 직구처럼 오다가 마지막에 글러브 쪽으로 짧고 날카롭게 꺾입니다. 타자 배트를 부러뜨리는 공으로 유명합니다 (마리아노 리베라).',
+     grip:'포심 그립에서 두 손가락을 약간 바깥쪽으로 치우치게 잡고, 던질 때 살짝 깎아 던집니다.',
+     fingers:[[0.18,-0.42,1.4],[0.5,-0.3,1.4]], thumb:[-0.1,0.62], spin:'side', spinSpd:0.4},
+    {key:'slider', name:'슬라이더', color:'#ff9a3d', speed:'128~140 km/h', dur:600,
+     breakX:-0.95, breakY:0.45, shape:'late', spinTxt:'옆으로 도는 총알 회전 — 빨간 점이 보임',
+     desc:'직구처럼 오다가 바깥쪽 아래로 미끄러지듯 꺾입니다. 공 가운데 빨간 점(회전축)이 보이면 슬라이더라는 말이 있을 정도로 옆회전이 특징.',
+     grip:'커브와 비슷하게 실밥 바깥쪽을 잡되, 손목을 덜 비틀고 검지 쪽으로 눌러 던집니다.',
+     fingers:[[0.25,-0.4,1.4],[0.55,-0.22,1.4]], thumb:[-0.2,0.58], spin:'side', spinSpd:0.55},
+    {key:'curve', name:'커브', color:'#4da6ff', speed:'112~125 km/h', dur:780,
+     breakX:-0.5, breakY:1.0, shape:'early', spinTxt:'탑스핀 — 앞으로 구르는 회전',
+     desc:'가장 느리고 가장 크게 떨어지는 공. 위로 떴다가 폭포처럼 떨어집니다. 직구 다음에 오면 타이밍이 완전히 무너집니다.',
+     grip:'중지를 실밥에 단단히 걸고 검지를 붙입니다. 던질 때 손목을 앞으로 감아 탑스핀을 겁니다.',
+     fingers:[[0.05,-0.42,1.5],[0.3,-0.36,1.2]], thumb:[0,0.6], spin:'top', spinSpd:0.5},
+    {key:'change', name:'체인지업', color:'#52e07a', speed:'122~134 km/h', dur:680,
+     breakX:0.3, breakY:0.5, shape:'gradual', spinTxt:'느린 백스핀 — 직구인 척하는 회전',
+     desc:'투수 팔 스윙은 직구랑 똑같은데 공만 늦게 옵니다. 타자가 직구 타이밍에 휘두르면 공은 아직 안 왔죠. 속이는 공의 대표.',
+     grip:'공을 손바닥 깊숙이 넣고 세 손가락(검지·중지·약지)으로 감쌉니다. 깊게 잡을수록 속도가 죽습니다.',
+     fingers:[[-0.3,-0.35,1.3],[0,-0.45,1.3],[0.3,-0.35,1.3]], thumb:[-0.15,0.6], spin:'back', spinSpd:0.18},
+    {key:'splitter', name:'스플리터', color:'#ff5a5a', speed:'130~142 km/h', dur:600,
+     breakX:0, breakY:0.95, shape:'late', spinTxt:'회전이 적음 — 갑자기 양력을 잃고 추락',
+     desc:'직구처럼 빠르게 오다가 홈플레이트 바로 앞에서 뚝 떨어집니다. 헛스윙 유도의 제왕. 일본에서는 포크볼로 발전했습니다.',
+     grip:'검지와 중지를 실밥 바깥으로 크게 벌려(split) 공을 끼우듯 잡습니다. 회전이 죽어서 끝에서 가라앉습니다.',
+     fingers:[[-0.5,-0.3,1.5],[0.5,-0.3,1.5]], thumb:[0,0.62], spin:'down', spinSpd:0.12},
+    {key:'sinker', name:'싱커', color:'#d4a35a', speed:'135~147 km/h', dur:560,
+     breakX:0.5, breakY:0.55, shape:'gradual', spinTxt:'기울어진 회전축 — 묵직하게 가라앉음',
+     desc:'빠른데 묵직하게 가라앉으며 팔 쪽으로 휩니다. 투심의 강화판. 배트 윗부분에 맞아 땅볼이 됩니다.',
+     grip:'투심 그립에서 공을 약간 깊게 잡고 손목을 엎듯이 던집니다.',
+     fingers:[[-0.15,-0.4,1.45],[0.2,-0.4,1.45]], thumb:[0.05,0.62], spin:'back', spinSpd:0.3},
+    {key:'sweeper', name:'스위퍼', color:'#ff6ec7', speed:'118~132 km/h', dur:660,
+     breakX:-1.35, breakY:0.25, shape:'gradual', spinTxt:'옆회전 위주 — 빗자루로 쓸듯 횡으로 휨',
+     desc:'슬라이더의 진화형으로 2023년 MLB 공식 구종이 된 신상 마구. 떨어지지 않고 옆으로만 크게 쓸려 나갑니다. 2023 WBC 결승에서 오타니가 트라웃을 잡은 마지막 공.',
+     grip:'슬라이더 그립에서 실밥을 더 깊게 채서, 옆회전을 극대화해 던집니다.',
+     fingers:[[0.3,-0.38,1.4],[0.6,-0.18,1.4]], thumb:[-0.25,0.55], spin:'side', spinSpd:0.6},
+    {key:'knuckle', name:'너클볼', color:'#c9a6ff', speed:'95~115 km/h', dur:950,
+     breakX:0, breakY:0.3, shape:'knuckle', spinTxt:'무회전 — 공기 흐름 따라 제멋대로 흔들림',
+     desc:'회전을 죽여서 던지는 마구. 공기 저항 때문에 나비처럼 흔들리며 날아와서, 던진 투수도 포수도 어디로 갈지 모릅니다.',
+     grip:'손톱이나 손가락 끝마디를 공에 세워 박고, 회전 없이 밀어 던집니다.',
+     fingers:[[-0.2,-0.38,0.7],[0.1,-0.45,0.7],[0.38,-0.32,0.7]], thumb:[-0.1,0.6], spin:'none', spinSpd:0.015}
+  ];
+
+  // ───────── DOM ─────────
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'), ctx=cv.getContext('2d');
+  const box=$('canvas-box');
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    const r=box.getBoundingClientRect();
+    W=r.width; H=r.height;
+    cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+
+  let cur=PITCHES[0];
+  let view='front';
+  let slow=false;
+  let throwT=-1;          // 던진 시각 (-1 = 대기)
+  let knSeed=1;
+  let trail=[];
+
+  // 구종 칩
+  const bar=$('pitch-bar');
+  PITCHES.forEach(p=>{
+    const c=document.createElement('div');
+    c.className='p-chip';
+    c.style.setProperty('--c', p.color);
+    c.textContent=p.name.split(' ')[0];
+    c.addEventListener('click', ()=>{
+      cur=p;
+      document.querySelectorAll('.p-chip').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on');
+      updateInfo();
+      autoThrow();
+    });
+    bar.appendChild(c);
+  });
+  bar.firstChild.classList.add('on');
+
+  function updateInfo(){
+    $('p-name').textContent=cur.name;
+    $('p-name').style.color=cur.color;
+    $('p-speed').textContent=cur.speed;
+    $('p-desc').textContent= view==='grip' ? cur.grip : cur.desc;
+  }
+
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+      t.classList.add('on');
+      view=t.dataset.v;
+      updateInfo();
+      autoThrow();
+    });
+  });
+
+  $('throw-btn').addEventListener('click', autoThrow);
+  $('slow-btn').addEventListener('click', ()=>{
+    slow=!slow;
+    $('slow-btn').classList.toggle('on', slow);
+  });
+
+  function autoThrow(){
+    if(view==='grip'){ throwT=-1; return; }
+    throwT=performance.now()+500;   // 0.5초 와인드업 후 릴리스
+    knSeed=Math.random()*1000;
+    trail=[];
+  }
+
+  // ───────── 궤적 계산 ─────────
+  function breakShape(t, shape){
+    if(shape==='early') return Math.sin(t*Math.PI/2);           // 일찍부터
+    if(shape==='late')  return t<0.6? t*0.15 : 0.09+Math.pow((t-0.6)/0.4,2)*0.91;  // 마지막에
+    return t*t*0.6+t*0.4;                                        // 서서히
+  }
+  function knWobble(t, seed){
+    return {
+      x: Math.sin(t*9+seed)*0.35 + Math.sin(t*23+seed*2)*0.2,
+      y: Math.cos(t*7+seed)*0.25 + Math.sin(t*17+seed*3)*0.15
+    };
+  }
+
+  // ───────── 타자 시점 ─────────
+  function drawFront(t){
+    // 무대
+    const VPx=W/2, VPy=H*0.30;
+    // 하늘/그라운드
+    ctx.fillStyle='#0a1626'; ctx.fillRect(0,0,W,H*0.55);
+    ctx.fillStyle='#11251a'; ctx.fillRect(0,H*0.55,W,H*0.45);
+    // 파울라인 원근
+    ctx.strokeStyle='rgba(255,255,255,0.25)';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(-W*0.2, H); ctx.lineTo(VPx, VPy);
+    ctx.moveTo(W*1.2, H); ctx.lineTo(VPx, VPy);
+    ctx.stroke();
+    // 마운드
+    ctx.strokeStyle='rgba(200,160,110,0.7)';
+    ctx.lineWidth=2.5;
+    ctx.beginPath();
+    ctx.ellipse(VPx, VPy+H*0.045, W*0.10, H*0.022, 0, 0, Math.PI*2);
+    ctx.stroke();
+    // 투수 실루엣
+    drawPitcherSil(VPx, VPy+H*0.035, H*0.075, t);
+    // 스트라이크 존 (참고용)
+    const zw=W*0.30, zh=H*0.26;
+    const zx=W/2-zw/2, zy=H*0.50;
+    ctx.strokeStyle='rgba(255,255,255,0.28)';
+    ctx.setLineDash([7,6]);
+    ctx.lineWidth=2;
+    ctx.strokeRect(zx,zy,zw,zh);
+    ctx.setLineDash([]);
+    // 홈플레이트
+    ctx.strokeStyle='rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    const hpY=H*0.88, hw=W*0.16;
+    ctx.moveTo(W/2-hw/2, hpY); ctx.lineTo(W/2+hw/2, hpY);
+    ctx.lineTo(W/2+hw/2*0.6, hpY+H*0.03); ctx.lineTo(W/2, hpY+H*0.05);
+    ctx.lineTo(W/2-hw/2*0.6, hpY+H*0.03); ctx.closePath();
+    ctx.stroke();
+
+    // 공
+    const rel=releaseT(t);
+    if(rel===null) return;
+    const tN=rel;
+    const start={x:VPx+W*0.012, y:VPy+H*0.01};
+    // 도착점: 존 중앙 + 구종 변화
+    const bk=breakShape(tN, cur.shape);
+    let endX=W/2 + cur.breakX*zw*0.9;
+    let endY=zy+zh*0.45 + cur.breakY*zh*0.9;
+    let x=start.x + (endX-start.x)*tN;
+    let y=start.y + (endY-start.y)*tN;
+    // 변화 분 적용 (직선 경로 대비 휘는 양)
+    x = start.x + (endX-start.x)*tN - cur.breakX*zw*0.9*(tN-bk*tN<0?0:(tN - bk));
+    y = start.y + (endY-start.y)*tN - (cur.breakY*zh*0.9)*(tN - bk);
+    if(cur.shape==='knuckle'){
+      const wb=knWobble(tN, knSeed);
+      x+=wb.x*zw*0.4*tN; y+=wb.y*zh*0.4*tN;
+    }
+    const r = 2 + Math.pow(tN,1.7)*(W*0.052);
+    // 잔상
+    trail.push({x:x,y:y,r:r,c:cur.color});
+    if(trail.length>26) trail.shift();
+    for(let i=0;i<trail.length;i++){
+      const tr=trail[i];
+      ctx.globalAlpha=(i/trail.length)*0.30;
+      ctx.beginPath();
+      ctx.arc(tr.x,tr.y,tr.r,0,Math.PI*2);
+      ctx.strokeStyle=tr.c;
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    drawBallWithSpin(x,y,r,t);
+  }
+
+  // ───────── 옆에서 ─────────
+  function drawSide(t){
+    ctx.fillStyle='#0a1626'; ctx.fillRect(0,0,W,H);
+    const gy=H*0.80;
+    ctx.fillStyle='#11251a'; ctx.fillRect(0,gy,W,H-gy);
+    ctx.strokeStyle='rgba(255,255,255,0.3)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
+    // 마운드(우측), 플레이트(좌측)
+    const mx=W*0.86, px=W*0.13;
+    ctx.strokeStyle='rgba(200,160,110,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(mx, gy, W*0.07, H*0.012, 0, Math.PI, Math.PI*2);
+    ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.55)';
+    ctx.fillRect(px-12, gy-3, 24, 4);
+    // 존 (옆에서 = 높이 띠)
+    const zTop=gy-H*0.30, zBot=gy-H*0.10;
+    ctx.strokeStyle='rgba(255,255,255,0.25)';
+    ctx.setLineDash([6,6]);
+    ctx.strokeRect(px-14, zTop, 28, zBot-zTop);
+    ctx.setLineDash([]);
+    // 투수 실루엣 (측면)
+    drawPitcherSil(mx, gy-H*0.085, H*0.085, t, true);
+
+    const rel=releaseT(t);
+    if(rel===null) return;
+    const tN=rel;
+    const startX=mx-W*0.045, startY=gy-H*0.30;
+    const endX=px, endY=zTop+(zBot-zTop)*0.4 + cur.breakY*(zBot-zTop)*1.0;
+    const bk=breakShape(tN, cur.shape);
+    let x=startX+(endX-startX)*tN;
+    // 기본 포물선 약간 + 구종 낙폭
+    let baseY=startY+(endY-startY)*tN;
+    let y=baseY - (cur.breakY*(zBot-zTop))*(tN-bk) + (cur.shape==='early'? -Math.sin(tN*Math.PI)*H*0.05*cur.breakY : 0);
+    if(cur.shape==='knuckle'){
+      const wb=knWobble(tN, knSeed);
+      y+=wb.y*H*0.06*tN; 
+    }
+    const r=W*0.022;
+    trail.push({x:x,y:y,r:r,c:cur.color});
+    if(trail.length>40) trail.shift();
+    for(let i=0;i<trail.length;i++){
+      const tr=trail[i];
+      ctx.globalAlpha=(i/trail.length)*0.35;
+      ctx.beginPath();
+      ctx.arc(tr.x,tr.y,tr.r*0.8,0,Math.PI*2);
+      ctx.strokeStyle=tr.c;
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    drawBallWithSpin(x,y,r,t);
+  }
+
+  // ───────── 그립 ─────────
+  function drawGrip(){
+    ctx.fillStyle='#0a1626'; ctx.fillRect(0,0,W,H);
+    const cx=W/2, cy=H*0.46, R=Math.min(W,H)*0.30;
+    // 공
+    ctx.save();
+    ctx.shadowColor=cur.color;
+    ctx.shadowBlur=18;
+    ctx.beginPath();
+    ctx.arc(cx,cy,R,0,Math.PI*2);
+    ctx.fillStyle='#f5f3ee';
+    ctx.fill();
+    ctx.restore();
+    // 실밥 (두 개의 호)
+    ctx.strokeStyle='#c33c4e';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.arc(cx-R*1.25, cy, R*1.5, -0.55, 0.55);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx+R*1.25, cy, R*1.5, Math.PI-0.55, Math.PI+0.55);
+    ctx.stroke();
+    // 실밥 바늘땀
+    ctx.lineWidth=2;
+    for(const side of [-1,1]){
+      for(let i=-5;i<=5;i++){
+        const a=i*0.1;
+        const ax=cx+side*R*1.25 - side*Math.cos(a)*R*1.5;
+        const ay=cy+Math.sin(a)*R*1.5;
+        ctx.beginPath();
+        ctx.moveTo(ax-6, ay-4); ctx.lineTo(ax+6, ay+4);
+        ctx.stroke();
+      }
+    }
+    // 손가락 (구종별 위치)
+    ctx.lineCap='round';
+    for(const [fx,fy,fl] of cur.fingers){
+      ctx.strokeStyle='rgba(90,143,212,0.9)';
+      ctx.lineWidth=R*0.24;
+      ctx.beginPath();
+      ctx.moveTo(cx+fx*R, cy+fy*R);
+      ctx.lineTo(cx+fx*R*1.05, cy+fy*R - R*0.55*fl);
+      ctx.stroke();
+    }
+    // 엄지
+    ctx.strokeStyle='rgba(90,143,212,0.65)';
+    ctx.lineWidth=R*0.22;
+    ctx.beginPath();
+    ctx.moveTo(cx+cur.thumb[0]*R, cy+cur.thumb[1]*R);
+    ctx.lineTo(cx+cur.thumb[0]*R-R*0.3, cy+cur.thumb[1]*R+R*0.35);
+    ctx.stroke();
+    // 라벨
+    ctx.fillStyle='#8a93a3';
+    ctx.font='14px -apple-system, sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('파란 막대 = 손가락 위치 (위에서 본 모습)', cx, cy+R+44);
+    // 회전 설명
+    ctx.fillStyle=cur.color;
+    ctx.font='600 16px -apple-system, sans-serif';
+    ctx.fillText(cur.spinTxt, cx, cy+R+72);
+  }
+
+  // ───────── 공통 ─────────
+  function releaseT(t){
+    if(throwT<0) return null;
+    const elapsed=t-throwT;
+    if(elapsed<0) return null;             // 와인드업 중
+    const dur=cur.dur*(slow?4:1);
+    const tN=elapsed/dur;
+    if(tN>1.0){
+      // 끝나면 잠깐 멈췄다가 자동 재투구
+      if(elapsed>dur+900) autoThrow();
+      return 1.0;
+    }
+    return tN;
+  }
+
+  function drawPitcherSil(x, y, h, t, side){
+    const wind = throwT>0 ? Math.min(1, Math.max(0, 1-(throwT-t)/500)) : 0;
+    ctx.save();
+    ctx.strokeStyle='rgba(230,234,240,0.9)';
+    ctx.fillStyle='rgba(230,234,240,0.9)';
+    ctx.lineWidth=Math.max(2.5, h*0.10);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.arc(x, y-h*0.85, h*0.14, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, y-h*0.7);
+    ctx.lineTo(x, y-h*0.25);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y-h*0.25); ctx.lineTo(x-h*0.2, y);
+    ctx.moveTo(x, y-h*0.25); ctx.lineTo(x+h*0.18, y);
+    ctx.stroke();
+    // 팔: 와인드업→릴리스
+    const aA=-2.3+wind*2.6*(side?1:1);
+    ctx.beginPath();
+    ctx.moveTo(x, y-h*0.6);
+    ctx.lineTo(x+Math.cos(aA)*h*0.42, y-h*0.6+Math.sin(aA)*h*0.42);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBallWithSpin(x,y,r,t){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.shadowColor=cur.color;
+    ctx.shadowBlur=12;
+    ctx.beginPath();
+    ctx.arc(0,0,r,0,Math.PI*2);
+    ctx.fillStyle=cur.color;
+    ctx.fill();
+    ctx.shadowBlur=0;
+    if(r>5 && cur.spin!=='none'){
+      const rot=t*cur.spinSpd*0.05;
+      ctx.strokeStyle='rgba(190,40,60,0.85)';
+      ctx.lineWidth=Math.max(1, r*0.1);
+      if(cur.spin==='side'){
+        for(let i=-1;i<=1;i++){
+          const off=Math.sin(rot+i*2.1)*r*0.65;
+          ctx.beginPath(); ctx.moveTo(off,-r*0.65); ctx.lineTo(off,r*0.65); ctx.stroke();
+        }
+        // 슬라이더의 빨간 점
+        if(cur.key==='slider'||cur.key==='cutter'){
+          ctx.beginPath();
+          ctx.arc(0,0,r*0.22,0,Math.PI*2);
+          ctx.fillStyle='rgba(190,40,60,0.7)';
+          ctx.fill();
+        }
+      }else{
+        const dirv=cur.spin==='top'?1:(cur.spin==='down'?1.3:-1);
+        for(let i=-1;i<=1;i++){
+          const off=((rot*dirv+i*2.1)%(Math.PI*2))/(Math.PI*2)*r*2-r;
+          ctx.beginPath(); ctx.moveTo(-r*0.65,off); ctx.lineTo(r*0.65,off); ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function loop(){
+    const t=performance.now();
+    if(view==='front') drawFront(t);
+    else if(view==='side') drawSide(t);
+    else drawGrip();
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  updateInfo();
+  autoThrow();
+  loop();
+})();
+</script>
+</body>
+</html>
