@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>구종 도감</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#05070c">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -17,10 +23,15 @@
     padding-bottom:env(safe-area-inset-bottom);
   }
   header {
-    padding:6px 16px 8px 16px;
+    padding:8px 16px 10px 16px;
     display:flex; align-items:baseline; gap:10px;
+    background:linear-gradient(180deg, rgba(90,143,212,0.10), transparent);
   }
-  header h1 { font-family:'Special Elite', monospace; font-size:22px; font-weight:400; letter-spacing:0.12em; color:#fff; }
+  header h1 {
+    font-family:'Special Elite', monospace; font-size:23px; font-weight:400;
+    letter-spacing:0.14em; color:#fff;
+    text-shadow:0 0 14px rgba(120,170,255,0.45);
+  }
   header .sub { font-size:13px; color:#7a8290; }
 
   /* 구종 선택 */
@@ -32,10 +43,21 @@
   .p-chip {
     flex:0 0 auto;
     font-size:16px; font-weight:700;
-    padding:10px 16px; border-radius:24px;
+    padding:10px 16px 10px 13px; border-radius:24px;
     background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
+    display:flex; align-items:center; gap:7px;
+    transition:transform 0.1s;
   }
-  .p-chip.on { border-color:var(--c); color:var(--c); box-shadow:0 0 10px color-mix(in srgb, var(--c) 50%, transparent); }
+  .p-chip:active { transform:scale(0.95); }
+  .p-chip::before {
+    content:''; width:9px; height:9px; border-radius:50%;
+    background:var(--c); box-shadow:0 0 6px var(--c);
+  }
+  .p-chip.on {
+    border-color:var(--c); color:#fff;
+    background:linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0));
+    box-shadow:0 0 12px color-mix(in srgb, var(--c) 45%, transparent);
+  }
 
   /* 정보 */
   #info {
@@ -56,7 +78,12 @@
     padding:11px 0; border-radius:12px;
     background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
   }
-  .tab.on { background:#1b2433; border-color:#5a8fd4; color:#fff; }
+  .tab { transition:all 0.15s; }
+  .tab.on {
+    background:linear-gradient(180deg, #243150, #1b2433);
+    border-color:#5a8fd4; color:#fff;
+    box-shadow:0 0 10px rgba(90,143,212,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
 
   #canvas-box { flex:1; position:relative; margin:0 12px; border-radius:14px; overflow:hidden; border:1.5px solid #222b3a; }
   canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
@@ -101,6 +128,11 @@
   <button id="slow-btn">느리게</button>
 </div>
 
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
+</script>
 <script>
 (function(){
   // ───────── 구종 데이터 ─────────
@@ -247,9 +279,48 @@
   function drawFront(t){
     // 무대
     const VPx=W/2, VPy=H*0.30;
-    // 하늘/그라운드
-    ctx.fillStyle='#0a1626'; ctx.fillRect(0,0,W,H*0.55);
-    ctx.fillStyle='#11251a'; ctx.fillRect(0,H*0.55,W,H*0.45);
+    // 밤하늘 그라데이션
+    const sky=ctx.createLinearGradient(0,0,0,H*0.55);
+    sky.addColorStop(0,'#060a14');
+    sky.addColorStop(1,'#10203a');
+    ctx.fillStyle=sky; ctx.fillRect(0,0,W,H*0.55);
+    // 관중석 띠 (불빛 점들)
+    ctx.fillStyle='#0b1322';
+    ctx.fillRect(0,H*0.18,W,H*0.10);
+    ctx.fillStyle='rgba(255,235,180,0.35)';
+    for(let i=0;i<40;i++){
+      const sx=(i*53.7)%W, sy=H*0.19+((i*31.3)%(H*0.075));
+      ctx.fillRect(sx,sy,2,2);
+    }
+    // 조명탑 2개
+    for(const lx of [W*0.14, W*0.86]){
+      ctx.strokeStyle='rgba(180,190,210,0.5)';
+      ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(lx,H*0.18); ctx.lineTo(lx,H*0.07); ctx.stroke();
+      ctx.save();
+      ctx.shadowColor='#fff8dc'; ctx.shadowBlur=14;
+      ctx.fillStyle='#fff3c4';
+      for(let r2=0;r2<2;r2++) for(let c2=-1;c2<=1;c2++)
+        ctx.fillRect(lx+c2*9-3, H*0.045+r2*9, 6,6);
+      ctx.restore();
+    }
+    // 그라운드 그라데이션
+    const gr=ctx.createLinearGradient(0,H*0.28,0,H);
+    gr.addColorStop(0,'#15301f');
+    gr.addColorStop(1,'#0d2014');
+    ctx.fillStyle=gr; ctx.fillRect(0,H*0.28,W,H*0.72);
+    // 잔디 줄무늬 (원근)
+    ctx.fillStyle='rgba(255,255,255,0.025)';
+    for(let i=0;i<5;i+=2){
+      const y1=H*0.30+i*H*0.07, y2=y1+H*0.07;
+      ctx.fillRect(0,y1,W,y2-y1);
+    }
+    // 타석 라인 (좌우 박스)
+    ctx.strokeStyle='rgba(255,255,255,0.30)';
+    ctx.lineWidth=2.5;
+    for(const sgn of [-1,1]){
+      ctx.strokeRect(W/2+sgn*W*0.20-W*0.085, H*0.74, W*0.17, H*0.18);
+    }
     // 파울라인 원근
     ctx.strokeStyle='rgba(255,255,255,0.25)';
     ctx.lineWidth=3;
@@ -273,6 +344,15 @@
     ctx.lineWidth=2;
     ctx.strokeRect(zx,zy,zw,zh);
     ctx.setLineDash([]);
+    // 존 9분할 희미하게
+    ctx.strokeStyle='rgba(255,255,255,0.08)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(zx+zw/3,zy); ctx.lineTo(zx+zw/3,zy+zh);
+    ctx.moveTo(zx+zw*2/3,zy); ctx.lineTo(zx+zw*2/3,zy+zh);
+    ctx.moveTo(zx,zy+zh/3); ctx.lineTo(zx+zw,zy+zh/3);
+    ctx.moveTo(zx,zy+zh*2/3); ctx.lineTo(zx+zw,zy+zh*2/3);
+    ctx.stroke();
     // 홈플레이트
     ctx.strokeStyle='rgba(255,255,255,0.5)';
     ctx.beginPath();
@@ -406,28 +486,46 @@
         ctx.stroke();
       }
     }
-    // 손가락 (구종별 위치)
+    // 손 (손바닥 + 손가락) — 살구색 반투명
+    const skin='rgba(232,180,150,0.88)', skinDark='rgba(200,145,115,0.9)';
     ctx.lineCap='round';
-    for(const [fx,fy,fl] of cur.fingers){
-      ctx.strokeStyle='rgba(90,143,212,0.9)';
-      ctx.lineWidth=R*0.24;
-      ctx.beginPath();
-      ctx.moveTo(cx+fx*R, cy+fy*R);
-      ctx.lineTo(cx+fx*R*1.05, cy+fy*R - R*0.55*fl);
-      ctx.stroke();
-    }
-    // 엄지
-    ctx.strokeStyle='rgba(90,143,212,0.65)';
-    ctx.lineWidth=R*0.22;
+    // 손바닥 (공 아래쪽 뒤)
+    ctx.fillStyle=skin;
     ctx.beginPath();
-    ctx.moveTo(cx+cur.thumb[0]*R, cy+cur.thumb[1]*R);
-    ctx.lineTo(cx+cur.thumb[0]*R-R*0.3, cy+cur.thumb[1]*R+R*0.35);
+    ctx.ellipse(cx+cur.thumb[0]*R*0.3, cy+R*0.92, R*0.62, R*0.42, 0, 0, Math.PI*2);
+    ctx.fill();
+    // 손가락: 캡슐 + 손끝 마디
+    for(const [fx,fy,fl] of cur.fingers){
+      const x1=cx+fx*R, y1=cy+fy*R + R*0.9;       // 손바닥에서 출발
+      const x2=cx+fx*R, y2=cy+fy*R;                // 공 위 접점
+      ctx.strokeStyle=skin;
+      ctx.lineWidth=R*0.26;
+      ctx.beginPath();
+      ctx.moveTo(x1,y1);
+      ctx.quadraticCurveTo(cx+fx*R*1.15, (y1+y2)/2, x2, y2);
+      ctx.stroke();
+      // 손끝 마디 (공을 누르는 부분 — 진하게)
+      ctx.fillStyle=skinDark;
+      ctx.beginPath();
+      ctx.arc(x2, y2, R*0.145, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // 엄지 (옆에서 받침)
+    ctx.strokeStyle=skin;
+    ctx.lineWidth=R*0.26;
+    ctx.beginPath();
+    ctx.moveTo(cx+cur.thumb[0]*R-R*0.45, cy+cur.thumb[1]*R+R*0.5);
+    ctx.quadraticCurveTo(cx+cur.thumb[0]*R-R*0.2, cy+cur.thumb[1]*R+R*0.2, cx+cur.thumb[0]*R, cy+cur.thumb[1]*R);
     ctx.stroke();
+    ctx.fillStyle=skinDark;
+    ctx.beginPath();
+    ctx.arc(cx+cur.thumb[0]*R, cy+cur.thumb[1]*R, R*0.14, 0, Math.PI*2);
+    ctx.fill();
     // 라벨
     ctx.fillStyle='#8a93a3';
     ctx.font='14px -apple-system, sans-serif';
     ctx.textAlign='center';
-    ctx.fillText('파란 막대 = 손가락 위치 (위에서 본 모습)', cx, cy+R+44);
+    ctx.fillText('진한 손끝 = 공을 누르는 위치', cx, cy+R+44);
     // 회전 설명
     ctx.fillStyle=cur.color;
     ctx.font='600 16px -apple-system, sans-serif';
@@ -476,14 +574,23 @@
     ctx.restore();
   }
 
+  function shade(hex,f){
+    const n=parseInt(hex.slice(1),16);
+    const R=Math.floor(((n>>16)&255)*f), G=Math.floor(((n>>8)&255)*f), B=Math.floor((n&255)*f);
+    return 'rgb('+R+','+G+','+B+')';
+  }
   function drawBallWithSpin(x,y,r,t){
     ctx.save();
     ctx.translate(x,y);
     ctx.shadowColor=cur.color;
-    ctx.shadowBlur=12;
+    ctx.shadowBlur=14;
+    const bg=ctx.createRadialGradient(-r*0.35,-r*0.35,r*0.1, 0,0,r);
+    bg.addColorStop(0,'#ffffff');
+    bg.addColorStop(0.35,cur.color);
+    bg.addColorStop(1, shade(cur.color,0.45));
     ctx.beginPath();
     ctx.arc(0,0,r,0,Math.PI*2);
-    ctx.fillStyle=cur.color;
+    ctx.fillStyle=bg;
     ctx.fill();
     ctx.shadowBlur=0;
     if(r>5 && cur.spin!=='none'){
