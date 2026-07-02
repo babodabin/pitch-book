@@ -924,52 +924,103 @@ if('serviceWorker' in navigator){
 
   // 그립 타입별 손가락 (검지=I, 중지=M, 약지=R)
   function drawFingers(cx,cy,R,type){
-    // 손가락 하나 그리기: 끝점(공 접점)에서 아래로 뻗는 길쭉한 형태
+    // 손가락 하나: 공 표면 접점(tip)에서 관절 두 마디로 자연스럽게 굽어 내려오는 형태
     function finger(tipX,tipY,len,ang,wide,label,pressure){
       const tx=cx+tipX*R, ty=cy+tipY*R;
       const dx=Math.sin(ang), dy=Math.cos(ang);
-      const bx=tx+dx*len*R, by=ty+dy*len*R;       // 손가락 뿌리쪽
-      // 손가락 본체 (살색, 둥근 막대)
+      // 바깥으로 살짝 휘는 곡선 — 공을 감싸쥔 느낌
+      const bow=(tipX>=0?1:-1)*R*0.13;
+      const px=-dy, py=dx;                          // 진행 수직 방향
+      const j1x=tx+dx*len*R*0.42+px*bow*0.5, j1y=ty+dy*len*R*0.42+py*bow*0.5;  // 첫 관절
+      const bx=tx+dx*len*R+px*bow, by=ty+dy*len*R+py*bow;                      // 손가락 뿌리
+      // ── 공 위 접촉 그림자: 손가락이 공에 '얹혀 있음'을 보여주는 핵심 ──
+      ctx.save();
+      ctx.globalAlpha=0.22;
+      ctx.fillStyle='#503020';
+      ctx.beginPath();
+      ctx.ellipse(tx+dx*R*0.06, ty+dy*R*0.06, R*0.13, R*0.07, Math.atan2(dy,dx), 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+      // ── 손가락 본체: 뿌리→관절(굵게), 관절→끝(가늘게) 2마디 = 자연스러운 테이퍼 ──
       ctx.save();
       ctx.lineCap='round';
-      ctx.strokeStyle='rgba(228,196,170,0.92)';
-      ctx.lineWidth=R*wide;
-      ctx.beginPath();
-      ctx.moveTo(tx,ty); ctx.lineTo(bx,by);
-      ctx.stroke();
-      // 손가락 외곽선
-      ctx.strokeStyle='rgba(150,110,90,0.5)';
+      // 아랫마디 (굵음)
+      ctx.strokeStyle='rgba(226,190,162,0.95)';
+      ctx.lineWidth=R*wide*1.18;
+      ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo((bx+j1x)/2+px*bow*0.15,(by+j1y)/2+py*bow*0.15, j1x,j1y); ctx.stroke();
+      // 윗마디 (가늘음)
+      ctx.lineWidth=R*wide*0.92;
+      ctx.beginPath(); ctx.moveTo(j1x,j1y); ctx.quadraticCurveTo((j1x+tx)/2,(j1y+ty)/2, tx,ty); ctx.stroke();
+      // 밝은 하이라이트 (윗면 입체감)
+      ctx.strokeStyle='rgba(245,220,200,0.55)';
+      ctx.lineWidth=R*wide*0.35;
+      ctx.beginPath(); ctx.moveTo(bx-px*R*wide*0.22,by-py*R*wide*0.22);
+      ctx.quadraticCurveTo(j1x-px*R*wide*0.22,j1y-py*R*wide*0.22, tx-px*R*wide*0.12,ty-py*R*wide*0.12); ctx.stroke();
+      // 관절 주름 (짧은 가로선 2개)
+      ctx.strokeStyle='rgba(150,105,85,0.5)';
       ctx.lineWidth=1.2;
-      ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(bx,by); ctx.stroke();
-      // 손톱(접점) — 압력 강하면 빨갛게
-      ctx.shadowColor=pressure>1?'#ff6a6a':'#78aaff';
-      ctx.shadowBlur=pressure>1?14:9;
-      ctx.fillStyle=pressure>1?'#ff8a8a':'#bcd4ff';
+      for(const s of [-0.4,0.4]){
+        ctx.beginPath();
+        ctx.moveTo(j1x+px*R*wide*s*0.9, j1y+py*R*wide*s*0.9);
+        ctx.lineTo(j1x+px*R*wide*s*0.35, j1y+py*R*wide*s*0.35);
+        ctx.stroke();
+      }
+      // 손톱 — 끝마디 위 살구색 타원
+      ctx.fillStyle='rgba(248,232,220,0.95)';
+      ctx.strokeStyle='rgba(190,150,130,0.6)';
+      ctx.lineWidth=1;
       ctx.beginPath();
-      ctx.arc(tx,ty,R*0.085*(pressure>1?1.25:1),0,Math.PI*2);
-      ctx.fill();
+      ctx.ellipse(tx+dx*R*0.02, ty+dy*R*0.02, R*0.075, R*0.055, Math.atan2(dy,dx)+Math.PI/2, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      // 압력 강조 (강하게 누르는 손가락만 붉은 링)
+      if(pressure>1){
+        ctx.strokeStyle='rgba(255,110,110,0.8)';
+        ctx.shadowColor='#ff6a6a'; ctx.shadowBlur=10;
+        ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(tx,ty,R*0.13,0,Math.PI*2); ctx.stroke();
+      }
       ctx.restore();
       // 라벨
       if(label){
         ctx.fillStyle='rgba(255,255,255,0.85)';
         ctx.font='700 11px -apple-system,sans-serif';
         ctx.textAlign='center';
-        ctx.fillText(label, tx, ty-R*0.16);
+        ctx.fillText(label, tx, ty-R*0.19);
       }
     }
-    // 엄지 (아래쪽에서 받침)
+    // 엄지: 아래에서 받치는 굽은 형태 + 손바닥 언덕
     function thumb(tipX,tipY){
       const tx=cx+tipX*R, ty=cy+tipY*R;
+      // 손바닥 언덕 (공 아래 살짝 보이게)
       ctx.save();
-      ctx.lineCap='round';
-      ctx.strokeStyle='rgba(228,196,170,0.85)';
-      ctx.lineWidth=R*0.26;
+      ctx.fillStyle='rgba(222,184,156,0.55)';
       ctx.beginPath();
-      ctx.moveTo(tx,ty); ctx.lineTo(tx-R*0.3, ty+R*0.5);
-      ctx.stroke();
-      ctx.shadowColor='#78aaff'; ctx.shadowBlur=8;
-      ctx.fillStyle='#bcd4ff';
-      ctx.beginPath(); ctx.arc(tx,ty,R*0.075,0,Math.PI*2); ctx.fill();
+      ctx.ellipse(tx-R*0.15, ty+R*0.52, R*0.55, R*0.3, -0.25, 0, Math.PI*2);
+      ctx.fill();
+      // 접촉 그림자
+      ctx.globalAlpha=0.2;
+      ctx.fillStyle='#503020';
+      ctx.beginPath();
+      ctx.ellipse(tx, ty-R*0.03, R*0.12, R*0.07, 0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha=1;
+      // 엄지 본체 — 굽은 두 마디
+      ctx.lineCap='round';
+      const j1x=tx-R*0.14, j1y=ty+R*0.24;
+      ctx.strokeStyle='rgba(226,190,162,0.92)';
+      ctx.lineWidth=R*0.28;
+      ctx.beginPath(); ctx.moveTo(tx-R*0.38, ty+R*0.55); ctx.quadraticCurveTo(tx-R*0.3,ty+R*0.38, j1x,j1y); ctx.stroke();
+      ctx.lineWidth=R*0.24;
+      ctx.beginPath(); ctx.moveTo(j1x,j1y); ctx.quadraticCurveTo(tx-R*0.05,ty+R*0.08, tx,ty); ctx.stroke();
+      // 하이라이트
+      ctx.strokeStyle='rgba(245,220,200,0.5)';
+      ctx.lineWidth=R*0.08;
+      ctx.beginPath(); ctx.moveTo(tx-R*0.34,ty+R*0.48); ctx.quadraticCurveTo(j1x,j1y-R*0.05, tx-R*0.02,ty+R*0.02); ctx.stroke();
+      // 엄지 손톱
+      ctx.fillStyle='rgba(248,232,220,0.95)';
+      ctx.strokeStyle='rgba(190,150,130,0.6)';
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.ellipse(tx,ty,R*0.07,R*0.05,0.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
       ctx.restore();
       ctx.fillStyle='rgba(255,255,255,0.6)';
       ctx.font='600 10px -apple-system,sans-serif';
@@ -1074,41 +1125,72 @@ if('serviceWorker' in navigator){
     const n=parseInt(hex.slice(1),16);
     return 'rgb('+Math.floor(((n>>16)&255)*f)+','+Math.floor(((n>>8)&255)*f)+','+Math.floor((n&255)*f)+')';
   }
+  // 야구공 실밥 3D 곡선 (단위 구면 위) — 미리 계산
+  const SEAM_PTS=(()=>{
+    const a=0.72,b=0.28,c=2*Math.sqrt(a*b),pts=[];
+    for(let i=0;i<=160;i++){
+      const tt=i/160*Math.PI*2;
+      pts.push([a*Math.cos(tt)+b*Math.cos(3*tt), a*Math.sin(tt)-b*Math.sin(3*tt), c*Math.sin(2*tt)]);
+    }
+    return pts;
+  })();
+
   function drawBallSpin(x,y,r,t){
     ctx.save();
     ctx.translate(x,y);
+    // 구종 색 글로우 (공 식별용 유지)
     ctx.shadowColor=cur.color;
     ctx.shadowBlur=Math.min(16, r*1.2);
+    // 공 본체 — 흰 야구공 셰이딩
     const bg=ctx.createRadialGradient(-r*0.35,-r*0.35,r*0.1, 0,0,r);
     bg.addColorStop(0,'#ffffff');
-    bg.addColorStop(0.35,cur.color);
-    bg.addColorStop(1, shade(cur.color,0.45));
+    bg.addColorStop(0.55,'#f2eee4');
+    bg.addColorStop(1,'#b6ae9d');
     ctx.beginPath();
     ctx.arc(0,0,r,0,Math.PI*2);
     ctx.fillStyle=bg;
     ctx.fill();
     ctx.shadowBlur=0;
-    if(r>5 && cur.spin!=='none'){
-      const rot=t*cur.spinSpd*0.05;
-      ctx.strokeStyle='rgba(190,40,60,0.85)';
-      ctx.lineWidth=Math.max(1, r*0.1);
-      if(cur.spin==='side'){
-        for(let i=-1;i<=1;i++){
-          const off=Math.sin(rot+i*2.1)*r*0.65;
-          ctx.beginPath(); ctx.moveTo(off,-r*0.65); ctx.lineTo(off,r*0.65); ctx.stroke();
-        }
-        if(cur.key==='slider'||cur.key==='cutter'||cur.key==='sweeper'){
+    // 구종 색 테두리 링
+    if(r>3){
+      ctx.strokeStyle=cur.color;
+      ctx.globalAlpha=0.55;
+      ctx.lineWidth=Math.max(1, r*0.09);
+      ctx.beginPath(); ctx.arc(0,0,r*0.98,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+    if(r>4 && cur.spin!=='none'){
+      // 구종별 회전축 — back:백스핀, top/down:탑스핀 계열, side:자이로(총알)
+      let ang=t*cur.spinSpd*0.05, axis;
+      if(cur.spin==='side'){ axis=[0.22,0.18,0.96]; }        // 시선축 회전 → 중심 빨간점이 자연히 생김
+      else if(cur.spin==='top'){ axis=[1,0,0]; ang=-ang; }
+      else if(cur.spin==='down'){ axis=[0.9,0,0.35]; ang=-ang*1.2; }
+      else { axis=[1,0,0]; }                                  // back
+      const al=Math.hypot(axis[0],axis[1],axis[2]);
+      const ux=axis[0]/al, uy=axis[1]/al, uz=axis[2]/al;
+      const ca=Math.cos(ang), sa=Math.sin(ang), ic=1-ca;
+      const m00=ca+ux*ux*ic,    m01=ux*uy*ic-uz*sa, m02=ux*uz*ic+uy*sa;
+      const m10=uy*ux*ic+uz*sa, m11=ca+uy*uy*ic,    m12=uy*uz*ic-ux*sa;
+      const m20=uz*ux*ic-uy*sa, m21=uz*uy*ic+ux*sa, m22=ca+uz*uz*ic;
+      // 실밥: 앞면(z>0)만, 깊이에 따라 진하고 굵게 → 진짜 구가 도는 느낌
+      ctx.lineCap='round';
+      let prev=null;
+      for(let i=0;i<SEAM_PTS.length;i++){
+        const p=SEAM_PTS[i];
+        const X=m00*p[0]+m01*p[1]+m02*p[2];
+        const Y=m10*p[0]+m11*p[1]+m12*p[2];
+        const Z=m20*p[0]+m21*p[1]+m22*p[2];
+        const q={x:X*r*0.99, y:Y*r*0.99, z:Z};
+        if(prev && prev.z>0.03 && q.z>0.03){
+          const depth=(prev.z+q.z)/2;
+          ctx.strokeStyle='rgba(195,60,78,'+(0.3+0.65*depth).toFixed(2)+')';
+          ctx.lineWidth=Math.max(1, r*0.085*(0.45+0.65*depth));
           ctx.beginPath();
-          ctx.arc(0,0,r*0.2,0,Math.PI*2);
-          ctx.fillStyle='rgba(190,40,60,0.7)';
-          ctx.fill();
+          ctx.moveTo(prev.x,prev.y);
+          ctx.lineTo(q.x,q.y);
+          ctx.stroke();
         }
-      }else{
-        const dirv=cur.spin==='top'?1:(cur.spin==='down'?1.3:-1);
-        for(let i=-1;i<=1;i++){
-          const off=((rot*dirv+i*2.1)%(Math.PI*2))/(Math.PI*2)*r*2-r;
-          ctx.beginPath(); ctx.moveTo(-r*0.65,off); ctx.lineTo(r*0.65,off); ctx.stroke();
-        }
+        prev=q;
       }
     }
     ctx.restore();
