@@ -122,6 +122,7 @@
     padding:15px 0; border-radius:13px; border:none;
   }
   .mode-btn:active { transform:translateY(2px); }
+  .mode-btn.active { outline:2px solid rgba(255,255,255,0.28); box-shadow:0 0 14px rgba(120,170,255,0.22); }
   #real-btn { background:#fff; color:#000; }
   #study-btn { background:#1b2433; color:#ffd23b; border:1.5px solid #4a4020; }
 
@@ -149,7 +150,7 @@
   </div>
   <div id="tabs">
     <div class="tab on" data-v="front">타자 시점</div>
-    <div class="tab" data-v="side">옆에서</div>
+    <div class="tab" data-v="side">움직임 분석</div>
     <div class="tab" data-v="grip">그립</div>
   </div>
   <div id="cmp-bar"><span class="cmp-lb">비교</span></div>
@@ -163,7 +164,7 @@
   </div>
   <div id="controls">
     <button class="mode-btn" id="real-btn">실전 ▶ 실제 속도</button>
-    <button class="mode-btn" id="study-btn">학습 ▶ 느리게</button>
+    <button class="mode-btn" id="study-btn">학습 ▶ 이해하기</button>
   </div>
   <div id="detail">
     <div class="d-card"><div class="lb">특징</div><div class="tx" id="d-desc"></div></div>
@@ -180,6 +181,15 @@ if('serviceWorker' in navigator){
 </script>
 <script>
 (function(){
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(Number(r)||0,Math.abs(w)/2,Math.abs(h)/2);
+      this.moveTo(x+r,y);this.lineTo(x+w-r,y);this.quadraticCurveTo(x+w,y,x+w,y+r);
+      this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);
+      this.lineTo(x,y+r);this.quadraticCurveTo(x,y,x+r,y);this.closePath();return this;
+    };
+  }
   // ───────── 실제 치수 (미터) ─────────
   const MOUND_DIST=18.44;       // 투구판 → 홈플레이트
   const RELEASE_D=17.0;         // 릴리스 지점 → 플레이트 (익스텐션 반영)
@@ -334,6 +344,21 @@ if('serviceWorker' in navigator){
   let absCross=null;    // ABS 자동 판정 — 존 앞면(플레이트) 통과 지점 {X,Y,strike}
   let cmp=null;         // 옆 뷰 비교 대상 구종 (null=비교 안 함)
 
+
+  // 학습 모드는 단순 감속이 아니라 구종의 핵심 변화 구간을 설명한다.
+  const STUDY_GUIDES={
+    '4seam':  {breakAt:0.62, short:'끝까지 곧게', cue:'중력보다 덜 떨어져 떠오르는 느낌'},
+    '2seam':  {breakAt:0.52, short:'팔쪽으로 흐름', cue:'빠르게 오며 팔쪽·아래로 움직임'},
+    'cutter': {breakAt:0.70, short:'홈 앞에서 짧게', cue:'직구처럼 오다가 글러브쪽으로 짧게 꺾임'},
+    'slider': {breakAt:0.60, short:'바깥 아래로', cue:'중반 이후 글러브쪽·아래로 미끄러짐'},
+    'sweeper':{breakAt:0.43, short:'옆으로 크게', cue:'초중반부터 옆으로 넓게 쓸려감'},
+    'curve':  {breakAt:0.34, short:'일찍 크게 낙하', cue:'높게 보이다 큰 곡선으로 떨어짐'},
+    'change': {breakAt:0.53, short:'직구처럼, 더 늦게', cue:'팔 스윙은 같고 공만 느리며 가라앉음'},
+    'splitter':{breakAt:0.72, short:'홈 앞에서 추락', cue:'직구처럼 버티다가 마지막에 뚝 떨어짐'},
+    'sinker': {breakAt:0.48, short:'팔쪽으로 가라앉음', cue:'빠른 속도로 팔쪽·아래로 강하게 이동'},
+    'knuckle':{breakAt:0.24, short:'불규칙하게 흔들림', cue:'회전이 거의 없어 진행 방향이 계속 바뀜'}
+  };
+
   // ───────── 원근 투영 (타자 시점) ─────────
   // 존 폭이 화면의 46%가 되도록 줌 설정 → 모든 크기가 같은 자로 그려짐
   function proj(X, Y, d){
@@ -406,8 +431,10 @@ if('serviceWorker' in navigator){
       view=t.dataset.v;
       const show = (view==='front'||view==='side') ? 'flex':'none';
       $('hand-wrap').style.display=show;
+      $('bat-btn').style.display = view==='front' ? 'block':'none';
       $('matchup').style.display = view==='front' ? 'block':'none';
       $('cmp-bar').style.display = view==='side' ? 'flex':'none';
+      $('controls').style.display = view==='grip' ? 'none':'flex';
       doThrow(mode);
     });
   });
@@ -443,6 +470,8 @@ if('serviceWorker' in navigator){
 
   function doThrow(m){
     mode=m;
+    $('real-btn').classList.toggle('active', mode==='real');
+    $('study-btn').classList.toggle('active', mode==='study');
     if(view==='grip'){ throwT=-1; return; }
     throwT=performance.now()+600;
     knSeed=Math.random()*1000;
@@ -454,7 +483,8 @@ if('serviceWorker' in navigator){
 
   function flightDur(){
     const real=RELEASE_D/(cur.v/3.6)*1000;
-    return mode==='real'? real : real*5.5;
+    // 실전은 실제 도달시간, 학습은 약 3.5~4초 동안 핵심 구간을 충분히 보여준다.
+    return mode==='real' ? real : Math.max(3500, real*8.5);
   }
 
   function knWobble(t, seed){
@@ -474,21 +504,24 @@ if('serviceWorker' in navigator){
   function ballWorldFor(p, tN, seed){
     const sgn=lefty?-1:1;
     const relX=-0.45*sgn;
-    const T=RELEASE_D/(p.v/3.6);         // 실제 비행시간 (초)
+    const T=RELEASE_D/(p.v/3.6);
     const t=tN*T;
-    const d=RELEASE_D*(1-tN);            // 거리: 릴리스 → 플레이트(0)
-    // 가속도 (마그누스 + 중력)
+    const d=RELEASE_D*(1-tN);
     const ax=2*(p.bx*sgn)/(T*T);
     const ay=2*(p.mv||0)/(T*T) - G;
-    // 목표를 맞추는 릴리스 속도
     const v0x=(p.tx*sgn - relX)/T - 0.5*ax*T;
     const v0y=(p.ty - REL_H)/T - 0.5*ay*T;
-    // 실제 위치
-    let X=relX + v0x*t + 0.5*ax*t*t;
-    let Y=REL_H + v0y*t + 0.5*ay*t*t;
-    // 기준선: 같은 릴리스에서 회전이 없었다면 (중력만) — 점선과의 차이가 곧 무브먼트
+
+    // 회전이 없다면 향했을 기준선. 여기에서 구종별 무브먼트가 갈라진다.
     const X0=relX + v0x*t;
     const Y0=REL_H + v0y*t - 0.5*G*t*t;
+    let moveT=tN*tN;
+    if(p.shape==='late') moveT=Math.pow(tN,3.65);
+    else if(p.shape==='early') moveT=Math.pow(tN,1.38);
+    else if(p.shape==='gradual') moveT=Math.pow(tN,2.05);
+
+    let X=X0+(p.bx*sgn)*moveT;
+    let Y=Y0+(p.mv||0)*moveT;
     if(p.shape==='knuckle'){
       const wb=knWobble(tN, seed);
       X+=wb.x*0.25*tN; Y+=wb.y*0.22*tN;
@@ -526,12 +559,73 @@ if('serviceWorker' in navigator){
     const e=t-throwT;
     if(e<0) return null;
     const dur=flightDur();
-    const over = mode==='real' ? 1.10 : 1.0;   // 실전: 플레이트 지나 계속
-    const tN=e/dur;
-    if(tN>over){
-      return 'done';
+    const over = mode==='real' ? 1.10 : 1.0;
+    const raw=e/dur;
+    if(raw>over) return 'done';
+    if(mode==='real') return raw;
+
+    // 학습 타임라인: 출발 → 변화 시작 → 홈 앞 결정 구간을 차례로 천천히 본다.
+    const g=STUDY_GUIDES[cur.key]||{breakAt:0.55};
+    const b=Math.max(0.30,Math.min(0.74,g.breakAt));
+    const ease=x=>x*x*(3-2*x);
+    let tN;
+    if(raw<0.22) tN=0.30*ease(raw/0.22);
+    else if(raw<0.55) tN=0.30+(b-0.30)*ease((raw-0.22)/0.33);
+    else if(raw<0.78) tN=b+(Math.min(0.90,b+0.16)-b)*ease((raw-0.55)/0.23);
+    else tN=Math.min(0.90,b+0.16)+(1-Math.min(0.90,b+0.16))*ease((raw-0.78)/0.22);
+    return Math.min(1,tN);
+  }
+
+  function drawArrow(x1,y1,x2,y2,color){
+    const a=Math.atan2(y2-y1,x2-x1), head=7;
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-Math.cos(a-0.55)*head,y2-Math.sin(a-0.55)*head);
+    ctx.lineTo(x2-Math.cos(a+0.55)*head,y2-Math.sin(a+0.55)*head);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawStudyCoachFront(tN,w){
+    if(mode!=='study' || !w) return;
+    const g=STUDY_GUIDES[cur.key]||{breakAt:0.55,short:'움직임 관찰',cue:'기준선과 실제 궤적의 차이를 본다'};
+    let phase='① 출발 — 직구처럼 보이는 구간';
+    if(tN>=g.breakAt && tN<0.88) phase='② 변화 시작 — '+g.short;
+    else if(tN>=0.88) phase='③ 홈 앞 결정 — '+g.cue;
+
+    ctx.save();
+    const bw=Math.min(W-42,330), bh=44, bx=(W-bw)/2, by=H*0.19;
+    ctx.fillStyle='rgba(5,9,17,0.82)';
+    ctx.strokeStyle=cur.color; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='800 13px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(phase,W/2,by+18);
+    ctx.fillStyle='rgba(225,232,242,0.72)'; ctx.font='600 11px -apple-system,sans-serif';
+    ctx.fillText('점선 = 회전 없음 · 색 선 = 실제 움직임',W/2,by+34);
+
+    // 같은 거리에서 기준선과 실제 공의 차이를 화살표로 표시한다.
+    const dC=Math.max(w.d,-CAM_BEHIND*0.65);
+    const a=proj(w.X0,w.Y0,dC), b=proj(w.X,w.Y,dC);
+    const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy);
+    if(tN>0.28 && len>2.2){
+      const scale=Math.min(2.3,Math.max(1.25,22/len));
+      drawArrow(a.x,a.y,a.x+dx*scale,a.y+dy*scale,cur.color);
+      ctx.fillStyle=cur.color; ctx.font='800 11px -apple-system,sans-serif';
+      ctx.textAlign=dx>=0?'left':'right';
+      ctx.fillText('회전이 만든 이동',a.x+dx*scale+(dx>=0?7:-7),a.y+dy*scale-7);
     }
-    return tN;
+
+    // 변화가 시작되는 위치를 링으로 고정해, 어디서 갈라지는지 기억하게 한다.
+    if(tN>=g.breakAt-0.03){
+      const q=ballWorldFor(cur,g.breakAt,knSeed);
+      const qp=proj(q.X,q.Y,Math.max(q.d,-CAM_BEHIND*0.65));
+      ctx.strokeStyle=cur.color; ctx.globalAlpha=0.75; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(qp.x,qp.y,7,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.font='700 10px -apple-system,sans-serif';
+      ctx.textAlign='center'; ctx.fillText('변화 시작',qp.x,qp.y-11);
+    }
+    ctx.restore();
   }
 
   // ───────── 타자 시점 ─────────
@@ -762,6 +856,7 @@ if('serviceWorker' in navigator){
         const p2=proj(last.X,last.Y,dC);
         const r2=Math.max(2,BALL_R_M*p2.s);
         drawBallSpin(p2.x,p2.y,r2,t);
+        drawStudyCoachFront(1,last);
       }
       drawABS();
       return;
@@ -807,6 +902,7 @@ if('serviceWorker' in navigator){
       ctx.restore();
     }
     drawBallSpin(p.x,p.y,r,t);
+    drawStudyCoachFront(tN,w);
   }
 
   function drawMitt(){
@@ -963,185 +1059,127 @@ if('serviceWorker' in navigator){
 
   // ───────── 옆에서 ─────────
   function drawSide(t){
-    ctx.fillStyle='#0a1626'; ctx.fillRect(0,0,W,H);
-    const gy=H*0.80;
-    ctx.fillStyle='#11251a'; ctx.fillRect(0,gy,W,H-gy);
-    ctx.strokeStyle='rgba(255,255,255,0.3)';
-    ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
-    // 옆 뷰 자: 화면 가로 = 19m / 높이도 같은 비율
-    const SX=W/19.5;
-    const px=W*0.07;                      // 플레이트 x
-    const mx=px+MOUND_DIST*SX;            // 마운드 x
-    const mY=v=>gy-v*SX*3.2;              // 높이 (보기 좋게 세로만 3.2배 — 다이어그램 뷰)
-    ctx.fillStyle='rgba(255,255,255,0.55)';
-    ctx.fillRect(px-10, gy-3, 20, 4);
-    ctx.strokeStyle='rgba(200,160,110,0.7)';
-    ctx.beginPath();
-    ctx.ellipse(mx, gy, 2.75*SX, 5, 0, Math.PI, Math.PI*2);
-    ctx.stroke();
-    // 존 (높이 띠)
-    ctx.strokeStyle='rgba(255,255,255,0.28)';
-    ctx.setLineDash([6,6]);
-    ctx.strokeRect(px-12, mY(ZONE_TOP), 24, mY(ZONE_BOT)-mY(ZONE_TOP));
-    ctx.setLineDash([]);
-    // 높이 눈금
-    ctx.fillStyle='rgba(255,255,255,0.25)';
-    ctx.font='11px -apple-system,sans-serif';
-    ctx.textAlign='left';
-    for(const hh of [0.5,1.0,1.5]){
-      ctx.fillRect(0, mY(hh), 8, 1);
-      ctx.fillText(hh+'m', 11, mY(hh)+4);
-    }
-    // 투수 측면
-    drawPitcherSide(mx, gy, mY, t);
-    // 세로 과장 안내 (우하단 — 좌상단 수치 패널과 겹치지 않게)
-    ctx.fillStyle='rgba(255,255,255,0.25)';
-    ctx.textAlign='right';
-    ctx.fillText('※ 높이는 보기 쉽게 확대한 다이어그램', W-10, H-24);
-    ctx.fillText('- - 회전 없었다면 (중력만)', W-10, H-9);
+    const bg=ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#08111f'); bg.addColorStop(1,'#050a12');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-    // ── 영구 궤적 (옆에서: 거리 d → x, 높이 Y → y) ──
-    function drawSidePath(){
-      if(path.length<2) return;
-      // 무회전 기준 궤적 (중력만) — 점선과의 간격이 곧 무브먼트
-      ctx.save();
-      ctx.globalAlpha=0.4;
-      ctx.strokeStyle='rgba(255,255,255,0.55)';
-      ctx.lineWidth=1.5;
-      ctx.setLineDash([5,5]);
-      ctx.beginPath();
-      for(let i=0;i<path.length;i++){
-        if(path[i].Y0===undefined) continue;
-        const xx=px + path[i].d*SX;
-        const yy=mY(path[i].Y0);
-        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      ctx.save();
-      ctx.lineCap='round'; ctx.lineJoin='round';
-      ctx.strokeStyle=cur.color;
-      ctx.lineWidth=3;
-      ctx.beginPath();
-      for(let i=0;i<path.length;i++){
-        const xx=px + path[i].d*SX;
-        const yy=mY(path[i].Y);
-        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);
-      }
-      ctx.stroke();
-      // 지면 그림자선 (높이감)
-      ctx.globalAlpha=0.25;
-      ctx.strokeStyle='rgba(0,0,0,0.6)';
-      ctx.lineWidth=2;
-      ctx.beginPath();
-      for(let i=0;i<path.length;i++){
-        const xx=px + path[i].d*SX;
-        i?ctx.lineTo(xx,gy):ctx.moveTo(xx,gy);
-      }
-      ctx.stroke();
-      ctx.restore();
-      ctx.globalAlpha=1;
-    }
-
-    // 옆 뷰 ABS 마커 — 플레이트 위치에서 통과 높이 + 판정
-    function drawSideABS(){
-      if(!absCross) return;
-      const col=absCross.strike ? '#52e07a' : '#ff5a5a';
-      const yy=mY(absCross.Y);
-      ctx.save();
-      ctx.strokeStyle=col; ctx.lineWidth=2;
-      ctx.shadowColor=col; ctx.shadowBlur=8;
-      ctx.beginPath(); ctx.arc(px, yy, 7, 0, Math.PI*2); ctx.stroke();
-      ctx.shadowBlur=0;
-      ctx.fillStyle=col;
-      ctx.font='800 13px -apple-system,sans-serif';
-      ctx.textAlign='left';
-      ctx.fillText('ABS · '+(absCross.strike?'STRIKE':'BALL'), px+16, yy+4);
-      ctx.restore();
-    }
-
-    // ── 비교 구종 궤적 (물리 폐형식이라 정적으로 즉시 계산) ──
-    function drawCmp(){
-      if(!cmp || cmp.key===cur.key) return;
-      ctx.save();
-      ctx.globalAlpha=0.9;
-      ctx.strokeStyle=cmp.color;
-      ctx.lineWidth=2.5;
-      ctx.setLineDash([8,5]);
-      ctx.beginPath();
-      for(let i=0;i<=64;i++){
-        const w2=ballWorldFor(cmp, i/64, knSeed+7);
-        const xx=px+w2.d*SX, yy=mY(w2.Y);
-        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // 도착점 + 이름표
-      const e=ballWorldFor(cmp, 1, knSeed+7);
-      ctx.fillStyle=cmp.color;
-      ctx.beginPath(); ctx.arc(px, mY(e.Y), 4.5, 0, Math.PI*2); ctx.fill();
-      ctx.font='700 11px -apple-system,sans-serif';
-      ctx.textAlign='left';
-      ctx.fillText(cmp.name.split(' ')[0], px+12, mY(e.Y)-9);
-      ctx.restore();
-    }
-
-    // ── 수치 패널: 구속·도달시간·무브먼트, 비교 시 차이까지 ──
-    function drawSideStats(){
-      const fmt=v=> (v>0?'+':'')+(Math.round(v*100)/100)+'m';
-      const statOf=p=>{
-        const T=flightT(p);
-        return p.name.split(' ')[0]+'  '+p.v+'km/h · 도달 '+T.toFixed(2)+'초 · 횡 '+fmt(p.bx)+' · 종 '+fmt(p.mv||0);
-      };
-      ctx.save();
-      ctx.font='700 11px -apple-system,sans-serif';
-      ctx.textAlign='left';
-      ctx.fillStyle=cur.color;
-      ctx.fillText(statOf(cur), 10, 16);
-      if(cmp && cmp.key!==cur.key){
-        ctx.fillStyle=cmp.color;
-        ctx.fillText(statOf(cmp), 10, 32);
-        const dT=Math.abs(flightT(cur)-flightT(cmp));
-        const slow=flightT(cur)>flightT(cmp)? cur:cmp;
-        const dH=Math.round(Math.abs(cur.ty-cmp.ty)*100);
-        ctx.fillStyle='rgba(255,255,255,0.55)';
-        ctx.fillText('차이  '+slow.name.split(' ')[0]+'가 '+dT.toFixed(2)+'초 늦게 도착 · 존 도착 높이차 '+dH+'cm', 10, 48);
-      }
-      ctx.restore();
-    }
+    const pad=12, titleH=35, gap=10;
+    const panelH=(H-titleH-gap*2-22)/2;
+    const top={x:pad,y:titleH,w:W-pad*2,h:panelH};
+    const bot={x:pad,y:titleH+panelH+gap,w:W-pad*2,h:panelH};
+    const panel=p=>{
+      ctx.fillStyle='rgba(16,27,44,0.92)'; ctx.strokeStyle='rgba(92,118,158,0.45)'; ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.roundRect(p.x,p.y,p.w,p.h,12); ctx.fill(); ctx.stroke();
+    };
+    panel(top); panel(bot);
 
     const rel=releaseT(t);
     if(rel==='done'){
-      pathDone=true;
-      judgeABS();
-      drawCmp();
-      drawSidePath();
-      if(path.length){
-        const last=path[path.length-1];
-        drawBallSpin(px+last.d*SX, mY(last.Y), Math.max(3.5,W*0.012), t);
+      pathDone=true; judgeABS();
+    } else if(rel!==null){
+      const w=ballWorld(Math.min(rel,1));
+      if(!path.length || Math.abs(path[path.length-1].d-w.d)>0.002) pushPath(w);
+    }
+
+    const g=STUDY_GUIDES[cur.key]||{breakAt:0.55,short:'움직임'};
+    ctx.fillStyle='#fff'; ctx.font='800 14px -apple-system,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('상하·좌우 움직임을 따로 본다',pad+2,22);
+
+    const xL=top.x+42, xR=top.x+top.w-18;
+    const xForD=d=>xL+(1-d/RELEASE_D)*(xR-xL);
+    const yMin=0.30,yMax=2.02;
+    const ySide=y=>top.y+top.h-20-(y-yMin)/(yMax-yMin)*(top.h-48);
+    const centerY=bot.y+bot.h/2+8;
+    const latRange=Math.max(0.68,Math.abs(cur.bx)+0.22,cmp?Math.abs(cmp.bx)+0.22:0);
+    const yTop=x=>centerY+x/latRange*(bot.h*0.34);
+
+    // 패널 제목과 기준선
+    ctx.font='800 12px -apple-system,sans-serif'; ctx.textAlign='left';
+    ctx.fillStyle='#a8c7ff'; ctx.fillText('옆에서 — 얼마나 떨어지는가',top.x+12,top.y+18);
+    ctx.fillStyle='#ffca88'; ctx.fillText('위에서 — 어느 쪽으로 휘는가',bot.x+12,bot.y+18);
+    ctx.font='600 10px -apple-system,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.textAlign='left'; ctx.fillText('투수',xL-8,top.y+top.h-6); ctx.textAlign='right'; ctx.fillText('포수',xR+8,top.y+top.h-6);
+
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1;
+    for(const hh of [0.5,1.0,1.5]){
+      const yy=ySide(hh); ctx.beginPath(); ctx.moveTo(xL,yy); ctx.lineTo(xR,yy); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='10px -apple-system,sans-serif'; ctx.textAlign='right';
+      ctx.fillText(hh.toFixed(1)+'m',xL-6,yy+3);
+    }
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(xL,centerY); ctx.lineTo(xR,centerY); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,255,255,0.36)'; ctx.font='700 10px -apple-system,sans-serif';
+    ctx.textAlign='left'; ctx.fillText(lefty?'팔쪽':'글러브쪽',bot.x+8,centerY-bot.h*0.23);
+    ctx.fillText(lefty?'글러브쪽':'팔쪽',bot.x+8,centerY+bot.h*0.23);
+    ctx.textAlign='center'; ctx.fillText('투수  →  포수',bot.x+bot.w/2,bot.y+35);
+
+    function samplePath(p, useBase, mapper, color, alpha, dashed, width){
+      ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap='round'; ctx.lineJoin='round';
+      if(dashed) ctx.setLineDash([7,5]);
+      ctx.beginPath();
+      for(let i=0;i<=80;i++){
+        const w=ballWorldFor(p,i/80,knSeed+(p===cur?0:11));
+        const pt=mapper(useBase?{...w,X:w.X0,Y:w.Y0}:w);
+        i?ctx.lineTo(pt.x,pt.y):ctx.moveTo(pt.x,pt.y);
       }
-      drawSideABS();
-      drawSideStats();
-      return;
+      ctx.stroke(); ctx.restore();
     }
-    if(rel===null){
-      drawCmp();
-      if(pathDone){ drawSidePath(); drawSideABS(); }
-      drawSideStats();
-      return;
+    const mapSide=w=>({x:xForD(w.d),y:ySide(w.Y)});
+    const mapTop=w=>({x:xForD(w.d),y:yTop(w.X)});
+
+    // 학습 모드에서는 완성될 전체 궤적을 옅게 먼저 보여준다.
+    if(mode==='study'){
+      samplePath(cur,false,mapSide,cur.color,0.20,false,5);
+      samplePath(cur,false,mapTop,cur.color,0.20,false,5);
     }
-    const tN=Math.min(rel,1);
-    const w=ballWorld(tN);
-    pushPath(w);
-    const x=px + w.d*SX;
-    const y=mY(w.Y);
-    const r=Math.max(3.5, W*0.012);
-    drawCmp();
-    drawSidePath();
-    drawSideStats();
-    drawBallSpin(x,y,r,t);
+    // 회전이 없었다면 갈 기준선
+    samplePath(cur,true,mapSide,'#ffffff',0.30,true,1.3);
+    samplePath(cur,true,mapTop,'#ffffff',0.30,true,1.3);
+    if(cmp && cmp.key!==cur.key){
+      samplePath(cmp,false,mapSide,cmp.color,0.76,true,2.2);
+      samplePath(cmp,false,mapTop,cmp.color,0.76,true,2.2);
+    }
+
+    function drawAnimated(mapper){
+      if(path.length<2) return;
+      ctx.save(); ctx.strokeStyle=cur.color; ctx.lineWidth=3.5; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath();
+      path.forEach((w,i)=>{const p=mapper(w); i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+      ctx.stroke(); ctx.restore();
+    }
+    drawAnimated(mapSide); drawAnimated(mapTop);
+
+    // 변화 시작 지점
+    const bw=ballWorldFor(cur,g.breakAt,knSeed);
+    [mapSide(bw),mapTop(bw)].forEach((p,idx)=>{
+      ctx.strokeStyle=cur.color; ctx.lineWidth=1.8; ctx.globalAlpha=0.8;
+      ctx.beginPath(); ctx.arc(p.x,p.y,5.5,0,Math.PI*2); ctx.stroke();
+      if(idx===0){ctx.fillStyle='#fff';ctx.font='700 9px -apple-system,sans-serif';ctx.textAlign='center';ctx.fillText('변화 시작',p.x,p.y-9);}
+    });
+    ctx.globalAlpha=1;
+
+    let current=null;
+    if(rel==='done') current=ballWorldFor(cur,1,knSeed);
+    else if(rel!==null) current=ballWorld(Math.min(rel,1));
+    else if(pathDone) current=ballWorldFor(cur,1,knSeed);
+    if(current){
+      const a=mapSide(current), b=mapTop(current);
+      drawBallSpin(a.x,a.y,Math.max(4,W*0.012),t);
+      drawBallSpin(b.x,b.y,Math.max(4,W*0.012),t);
+    }
+
+    // 도착점과 핵심 수치
+    const end=ballWorldFor(cur,1,knSeed);
+    const e1=mapSide(end), e2=mapTop(end);
+    const col=absCross?(absCross.strike?'#52e07a':'#ff5a5a'):cur.color;
+    ctx.fillStyle=col; [e1,e2].forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();});
+    ctx.fillStyle='rgba(5,9,17,0.84)'; ctx.strokeStyle='rgba(255,255,255,0.14)';
+    const cardW=Math.min(W-36,360), cardX=(W-cardW)/2, cardY=bot.y+bot.h-38;
+    ctx.beginPath(); ctx.roundRect(cardX,cardY,cardW,29,9); ctx.fill(); ctx.stroke();
+    const T=flightT(cur);
+    ctx.fillStyle='#fff'; ctx.font='700 10.5px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText('도달 '+T.toFixed(2)+'초 · 좌우 '+Math.round(Math.abs(cur.bx)*100)+'cm · 상하 '+(cur.mv>=0?'+':'')+Math.round(cur.mv*100)+'cm',W/2,cardY+12);
+    ctx.fillStyle=cur.color; ctx.fillText(g.short+' — '+g.cue,W/2,cardY+23);
   }
 
   function drawPitcherSide(mx, gy, mY, t){
@@ -1173,39 +1211,95 @@ if('serviceWorker' in navigator){
 
   // ───────── 그립 (정밀화) ─────────
   function drawGrip(){
-    // 배경
-    const bgG=ctx.createLinearGradient(0,0,0,H);
-    bgG.addColorStop(0,'#0c1830'); bgG.addColorStop(1,'#070e1c');
-    ctx.fillStyle=bgG; ctx.fillRect(0,0,W,H);
+    const bg=ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#0b172b'); bg.addColorStop(1,'#050a12');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-    const cx=W/2, cy=H*0.34, R=Math.min(W,H)*0.24;
+    const cx=W*0.43, cy=H*0.40, R=Math.min(W*0.34,H*0.27);
+    ctx.fillStyle='#fff'; ctx.font='800 15px -apple-system,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('그립 도식 — 손 모양보다 접촉 위치를 본다',16,25);
+    ctx.fillStyle=cur.color; ctx.font='800 12px -apple-system,sans-serif'; ctx.textAlign='right';
+    ctx.fillText(cur.name,W-16,25);
 
-    // ── 공 본체 ──
+    // 공 본체
     ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=20; ctx.shadowOffsetY=6;
-    const bg=ctx.createRadialGradient(cx-R*0.35,cy-R*0.4,R*0.1,cx,cy,R*1.05);
-    bg.addColorStop(0,'#ffffff');
-    bg.addColorStop(0.7,'#f0ece2');
-    bg.addColorStop(1,'#cfc8b8');
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
-    ctx.fillStyle=bg; ctx.fill();
-    ctx.restore();
+    ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=20; ctx.shadowOffsetY=7;
+    const ballG=ctx.createRadialGradient(cx-R*0.35,cy-R*0.38,R*0.08,cx,cy,R*1.05);
+    ballG.addColorStop(0,'#fff'); ballG.addColorStop(0.72,'#f1eee5'); ballG.addColorStop(1,'#c9c1b2');
+    ctx.fillStyle=ballG; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill(); ctx.restore();
+    // 손가락 접촉점과 겹쳐도 읽히도록 실밥을 단순하고 선명한 도식으로 표시한다.
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,R*0.98,0,Math.PI*2); ctx.clip();
+    ctx.translate(cx,cy); ctx.rotate(cur.seamRot||0);
+    ctx.strokeStyle='#c83f52'; ctx.lineWidth=Math.max(3,R*0.035); ctx.lineCap='round';
+    ctx.setLineDash([Math.max(4,R*0.055),Math.max(3,R*0.035)]);
+    for(const side of [-1,1]){
+      ctx.beginPath();
+      ctx.moveTo(side*R*0.48,-R*0.88);
+      ctx.bezierCurveTo(side*R*0.12,-R*0.52,side*R*0.12,R*0.52,side*R*0.48,R*0.88);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.restore();
 
-    // ── 실밥: 그립 타입별로 방향/모양 다르게 ──
-    drawSeams(cx,cy,R,cur.gripType||'fourseam');
+    const type=cur.gripType||'fourseam';
+    const labels = type==='circle' ? ['중지','약지','새끼'] : type==='knuckle' ? ['검지 손톱','중지 손톱','약지 손톱'] : ['검지','중지'];
+    const strong = (cur.key==='cutter'||cur.key==='sinker'||cur.key==='2seam') ? 0 :
+                   (type==='slider'||type==='curve') ? 1 : -1;
 
-    // ── 손가락: 실제 손가락 형태(관절 있는 길쭉한 모양) ──
-    drawFingers(cx,cy,R,cur.gripType||'fourseam');
+    function contactFinger(fp,i){
+      const x=cx+fp[0]*R, y=cy+fp[1]*R;
+      const spread=(fp[0])*R*0.35;
+      const ex=x+spread, ey=cy-R*1.18;
+      ctx.save(); ctx.lineCap='round';
+      ctx.strokeStyle='rgba(118,166,230,0.30)'; ctx.lineWidth=R*0.22;
+      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo((ex+x)/2,y-R*0.18,x,y); ctx.stroke();
+      ctx.strokeStyle='rgba(225,238,255,0.86)'; ctx.lineWidth=R*0.15;
+      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo((ex+x)/2,y-R*0.18,x,y); ctx.stroke();
+      ctx.fillStyle=i===strong?'#ff6b6b':'#58d6ff';
+      ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10;
+      if(type==='knuckle'){
+        ctx.fillRect(x-R*0.055,y-R*0.045,R*0.11,R*0.09);
+      } else {
+        ctx.beginPath(); ctx.ellipse(x,y,R*0.115,R*0.07,fp[0]*0.7,0,Math.PI*2); ctx.fill();
+      }
+      ctx.shadowBlur=0; ctx.fillStyle='#17304b'; ctx.font='900 9.5px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText(labels[i]||('손가락 '+(i+1)),ex,ey+17);
+      if(i===strong){ctx.fillStyle='#ff6b6b';ctx.font='800 8.5px -apple-system,sans-serif';ctx.fillText('주 압력',ex,ey+29);}
+      ctx.restore();
+    }
+    (cur.fingers||[]).forEach(contactFinger);
 
-    // ── 범례 + 그립 설명 ──
-    ctx.textAlign='center';
-    ctx.fillStyle='#dfe3e8';
-    ctx.font='700 14px -apple-system, sans-serif';
-    ctx.fillText(cur.name+' 그립', cx, cy+R+38);
-    // 설명 (줄바꿈 처리)
-    ctx.fillStyle='#aeb6c4';
-    ctx.font='13px -apple-system, sans-serif';
-    wrapText(cur.gripTxt||'', cx, cy+R+62, W-48, 19);
+    if(type==='circle'){
+      const rx=cx-R*1.06, ry=cy+R*0.16;
+      ctx.save(); ctx.strokeStyle='#ffd05b'; ctx.lineWidth=R*0.10; ctx.shadowColor='#ffd05b';ctx.shadowBlur=8;
+      ctx.beginPath();ctx.arc(rx,ry,R*0.23,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;
+      ctx.fillStyle='#fff';ctx.font='800 10px -apple-system,sans-serif';ctx.textAlign='center';
+      ctx.fillText('엄지+검지',rx,ry-R*0.32);ctx.fillText('○ 만들기',rx,ry+R*0.38);ctx.restore();
+    }
+    if(type==='split'){
+      ctx.save();ctx.strokeStyle='#ffd05b';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.arc(cx,cy-R*0.18,R*0.58,Math.PI*0.80,Math.PI*0.20,true);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#ffd05b';ctx.font='800 10px -apple-system,sans-serif';ctx.textAlign='center';ctx.fillText('V자로 넓게 벌림',cx,cy-R*0.82);ctx.restore();
+    }
+
+    // 엄지는 뒷면에 있어 별도 작은 공으로 분리한다.
+    const ix=W*0.79, iy=H*0.42, ir=Math.min(R*0.48,W*0.13);
+    ctx.fillStyle='rgba(255,255,255,0.10)';ctx.strokeStyle='rgba(255,255,255,0.30)';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.arc(ix,iy,ir,0,Math.PI*2);ctx.fill();ctx.stroke();
+    const th=cur.thumb||[0,0.6];
+    const tx=ix+th[0]*ir, ty=iy+th[1]*ir*0.75;
+    ctx.fillStyle='#ffd05b';ctx.shadowColor='#ffd05b';ctx.shadowBlur=8;ctx.beginPath();ctx.arc(tx,ty,Math.max(4,ir*0.11),0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='#fff';ctx.font='800 11px -apple-system,sans-serif';ctx.textAlign='center';ctx.fillText('공 뒷면',ix,iy-ir-12);ctx.fillText('엄지',tx,ty+18);
+
+    // 핵심 원칙 카드
+    const cardX=14, cardY=H*0.68, cardW=W-28, cardH=H-cardY-14;
+    ctx.fillStyle='rgba(10,18,31,0.92)';ctx.strokeStyle='rgba(85,113,155,0.48)';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.roundRect(cardX,cardY,cardW,cardH,12);ctx.fill();ctx.stroke();
+    ctx.fillStyle=cur.color;ctx.font='800 12px -apple-system,sans-serif';ctx.textAlign='left';ctx.fillText('잡는 법의 핵심',cardX+12,cardY+20);
+    ctx.fillStyle='#d8dfeb';ctx.font='13px -apple-system,sans-serif';ctx.textAlign='left';
+    wrapText(cur.gripTxt||'',cardX+12,cardY+41,cardW-24,18);
+    ctx.fillStyle='rgba(255,255,255,0.50)';ctx.font='700 10px -apple-system,sans-serif';
+    ctx.fillText('● 파랑: 접촉점   ● 빨강: 더 강하게 누르는 손가락   ● 노랑: 엄지/특수 동작',cardX+12,cardY+cardH-12);
   }
 
   // 그립 타입별 실밥
