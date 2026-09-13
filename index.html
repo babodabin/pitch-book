@@ -588,41 +588,41 @@ const BATTER_TYPES = {
   average:  { ko: '평균',    take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.0,  hr: 1.0,  read: 1.0, sit: 1.0 },
 };
 // 상대 팀 7개 — 실제 선수 이름·좌우만 쓰고, 성향은 선수 스타일로 배정한 설계값 (실제 기록 데이터 아님).
-// 타순은 성향에 맞춰 짬. closer = 플레이어(투수) 이름으로 씀
+// 타순은 성향에 맞춰 짬. pitchers = [이름, 좌우, 구종 목록] — 구종은 아는 대로 넣은 설계값
 const B = (name, hand, type, pos) => ({ name, hand, type, pos });
 const TEAMS = [
   { key: 'kbo_all', name: 'KBO 역대 최고', closer: '오승환',
-    pitchers: [['선동열','R'],['최동원','R'],['류현진','L'],['양현종','L'],['오승환','R']], batters: [
+    pitchers: [['선동열','R',["FF","SL","CU"]],['최동원','R',["FF","CU","SL"]],['류현진','L',["FF","FC","CH","CU","SI"]],['양현종','L',["FF","SL","CH","CU"]],['오승환','R',["FF","SL","CU"]]], batters: [
     B('이종범','R','contact','유격'), B('정근우','R','contact','2루'), B('양준혁','L','patient','외야'),
     B('이승엽','L','power','1루'), B('이대호','R','power','지명'), B('최정','R','power','3루'),
     B('최형우','L','power','외야'), B('장효조','L','contact','외야'), B('양의지','R','guess','포수') ] },
   { key: 'nc_all', name: 'NC 다이노스 역대', closer: '임창민',
-    pitchers: [['에릭 페디','R'],['드류 루친스키','R'],['구창모','L'],['찰리 쉬렉','R'],['임창민','R']], batters: [
+    pitchers: [['에릭 페디','R',["SI","ST","FC","CH","FF"]],['드류 루친스키','R',["SI","FF","SL","CU","CH","FC"]],['구창모','L',["FF","SL","FS","CU"]],['찰리 쉬렉','R',["FF","SI","SL","CH"]],['임창민','R',["FF","SL","FS"]]], batters: [
     B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('나성범','L','power','외야'),
     B('에릭 테임즈','L','power','1루'), B('양의지','R','guess','포수'), B('박석민','R','power','3루'),
     B('이호준','R','power','지명'), B('박건우','R','contact','외야'), B('손시헌','R','average','유격') ] },
   { key: 'y2000', name: '2000년대', closer: '오승환',
-    pitchers: [['손민한','R'],['류현진','L'],['배영수','R'],['정민태','R'],['오승환','R']], batters: [
+    pitchers: [['손민한','R',["FF","SL","CH","CU"]],['류현진','L',["FF","FC","CH","CU","SI"]],['배영수','R',["FF","SL","CU","FS"]],['정민태','R',["FF","SL","CU","CH"]],['오승환','R',["FF","SL","CU"]]], batters: [
     B('정근우','R','contact','2루'), B('이병규','L','contact','외야'), B('양준혁','L','patient','지명'),
     B('이승엽','L','power','1루'), B('심정수','R','power','외야'), B('김동주','R','power','3루'),
     B('박재홍','R','power','외야'), B('박경완','R','guess','포수'), B('박진만','R','average','유격') ] },
   { key: 'y2010', name: '2010년대', closer: '오승환',
-    pitchers: [['류현진','L'],['윤석민','R'],['양현종','L'],['더스틴 니퍼트','R'],['오승환','R']], batters: [
+    pitchers: [['류현진','L',["FF","FC","CH","CU","SI"]],['윤석민','R',["FF","SL","CU","CH"]],['양현종','L',["FF","SL","CH","CU"]],['더스틴 니퍼트','R',["FF","SL","CU","CH"]],['오승환','R',["FF","SL","CU"]]], batters: [
     B('서건창','L','contact','2루'), B('손아섭','L','contact','외야'), B('김현수','L','contact','외야'),
     B('박병호','R','power','1루'), B('이대호','R','power','지명'), B('최형우','L','power','외야'),
     B('최정','R','power','3루'), B('양의지','R','guess','포수'), B('김하성','R','average','유격') ] },
   { key: 'y2020', name: '2020년대', closer: '정해영',
-    pitchers: [['코디 폰세','R'],['안우진','R'],['원태인','R'],['곽빈','R'],['정해영','R']], batters: [
+    pitchers: [['코디 폰세','R',["FF","FS","CU","SL","FC"]],['안우진','R',["FF","SL","CU","CH"]],['원태인','R',["FF","SI","SL","CH","CU"]],['곽빈','R',["FF","SL","CU","CH"]],['정해영','R',["FF","SL","FS"]]], batters: [
     B('김혜성','L','contact','2루'), B('이정후','L','contact','외야'), B('김도영','R','power','3루'),
     B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','지명'),
     B('양의지','R','guess','포수'), B('손아섭','L','contact','외야'), B('오지환','L','average','유격') ] },
   { key: 'y2026', name: '2026 시즌', closer: '곽빈',
-    pitchers: [['곽빈','R'],['최민석','R']], batters: [
+    pitchers: [['곽빈','R',["FF","SL","CU","CH"]],['최민석','R',["FF","SL","CH","CU"]]], batters: [
     B('박찬호','R','aggro','유격'), B('서건창','L','contact','지명'), B('김도영','R','power','외야'),
     B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','3루'),
     B('양의지','R','guess','포수'), B('빅터 레이예스','L','contact','외야'), B('박준순','R','aggro','2루') ] },
   { key: 'active', name: '현역 최강', closer: '정해영',
-    pitchers: [['곽빈','R'],['원태인','R'],['류현진','L'],['임찬규','R'],['정해영','R']], batters: [
+    pitchers: [['곽빈','R',["FF","SL","CU","CH"]],['원태인','R',["FF","SI","SL","CH","CU"]],['류현진','L',["FF","FC","CH","CU","SI"]],['임찬규','R',["FF","SL","CH","CU"]],['정해영','R',["FF","SL","FS"]]], batters: [
     B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('김도영','R','power','3루'),
     B('강백호','L','power','1루'), B('최형우','L','power','지명'), B('구자욱','L','power','외야'),
     B('양의지','R','guess','포수'), B('최정','R','power','3루'), B('박찬호','R','aggro','유격') ] },
@@ -2582,17 +2582,20 @@ return {
   const setup = Object.assign({ my:'kbo_all', pitcher:0, opp:'y2010' }, (()=>{ try{ return JSON.parse(localStorage.getItem(SETUP_KEY)||'{}'); }catch(e){ return {}; } })());
   const teamOf = (k)=> (E ? E.TEAMS.find(t=>t.key===k) : null) || (E ? E.TEAMS[0] : null);
   let LINEUP = E ? teamOf(setup.opp).batters : [];
-  function myPitcher(){ const t=teamOf(setup.my); const p=t.pitchers[Math.min(setup.pitcher, t.pitchers.length-1)]; return { name:p[0], hand:p[1], team:t }; }
+  function myPitcher(){ const t=teamOf(setup.my); const p=t.pitchers[Math.min(setup.pitcher, t.pitchers.length-1)]; return { name:p[0], hand:p[1], rep:p[2]||E.PITCH_TYPES, team:t }; }
   function applySetup(){
     LINEUP = teamOf(setup.opp).batters;
     const p=myPitcher(); lefty = p.hand==='L';
+    // 이 투수의 구종만 칩에 남김
+    for(const [code,c] of Object.entries(gchips)) c.style.display = p.rep.includes(code) ? 'flex' : 'none';
+    if(!p.rep.includes(gamePitch)){ gamePitch=p.rep[0]; Object.values(gchips).forEach(x=>x.classList.remove('on')); gchips[gamePitch].classList.add('on'); }
     try{ localStorage.setItem(SETUP_KEY, JSON.stringify(setup)); }catch(e){}
   }
   function renderSetup(){
     const mk=(row, items, onKey, onClick)=>{ row.innerHTML=''; items.forEach((it,i)=>{ const c=document.createElement('div'); c.className='t-chip'+(it.on?' on':''); c.innerHTML=it.html; c.addEventListener('click',()=>{ onClick(i); renderSetup(); }); row.appendChild(c); }); };
     mk($('su-my'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.my})), null, (i)=>{ setup.my=E.TEAMS[i].key; setup.pitcher=0; });
     const my=teamOf(setup.my);
-    mk($('su-p'), my.pitchers.map((p,i)=>({html:p[0]+'<small>'+(p[1]==='L'?'좌':'우')+'</small>', on:i===Math.min(setup.pitcher,my.pitchers.length-1)})), null, (i)=>{ setup.pitcher=i; });
+    mk($('su-p'), my.pitchers.map((p,i)=>({html:p[0]+'<small>'+(p[1]==='L'?'좌':'우')+' · '+p[2].map(c=>PT_KO[c]).join('·')+'</small>', on:i===Math.min(setup.pitcher,my.pitchers.length-1)})), null, (i)=>{ setup.pitcher=i; });
     mk($('su-opp'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.opp})), null, (i)=>{ setup.opp=E.TEAMS[i].key; });
     const opp=teamOf(setup.opp);
     $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':'우')+'</small>').join(' · ');
