@@ -284,17 +284,47 @@ const BATTER_TYPES = {
   aggro:    { ko: '적극적',  take: 0.7,  whiff: 1.2,  single: 1.05, double: 1.05, hr: 1.0,  read: 0.8, sit: 0.9 },
   average:  { ko: '평균',    take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.0,  hr: 1.0,  read: 1.0, sit: 1.0 },
 };
-const LINEUP = [
-  { name: '김도현', hand: 'L', type: 'contact' },
-  { name: '박민재', hand: 'R', type: 'patient' },
-  { name: '이준서', hand: 'L', type: 'guess' },
-  { name: '최현우', hand: 'R', type: 'power' },
-  { name: '정우진', hand: 'L', type: 'power' },
-  { name: '강태양', hand: 'R', type: 'average' },
-  { name: '윤지호', hand: 'R', type: 'aggro' },
-  { name: '한승민', hand: 'L', type: 'average' },
-  { name: '오세훈', hand: 'R', type: 'aggro' },
+// 상대 팀 7개 — 실제 선수 이름·좌우만 쓰고, 성향은 선수 스타일로 배정한 설계값 (실제 기록 데이터 아님).
+// 타순은 성향에 맞춰 짬. closer = 플레이어(투수) 이름으로 씀
+const B = (name, hand, type, pos) => ({ name, hand, type, pos });
+const TEAMS = [
+  { key: 'kbo_all', name: 'KBO 역대 최고', closer: '오승환',
+    pitchers: [['선동열','R'],['최동원','R'],['류현진','L'],['양현종','L'],['오승환','R']], batters: [
+    B('이종범','R','contact','유격'), B('정근우','R','contact','2루'), B('양준혁','L','patient','외야'),
+    B('이승엽','L','power','1루'), B('이대호','R','power','지명'), B('최정','R','power','3루'),
+    B('최형우','L','power','외야'), B('장효조','L','contact','외야'), B('양의지','R','guess','포수') ] },
+  { key: 'nc_all', name: 'NC 다이노스 역대', closer: '임창민',
+    pitchers: [['에릭 페디','R'],['드류 루친스키','R'],['구창모','L'],['찰리 쉬렉','R'],['임창민','R']], batters: [
+    B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('나성범','L','power','외야'),
+    B('에릭 테임즈','L','power','1루'), B('양의지','R','guess','포수'), B('박석민','R','power','3루'),
+    B('이호준','R','power','지명'), B('박건우','R','contact','외야'), B('손시헌','R','average','유격') ] },
+  { key: 'y2000', name: '2000년대', closer: '오승환',
+    pitchers: [['손민한','R'],['류현진','L'],['배영수','R'],['정민태','R'],['오승환','R']], batters: [
+    B('정근우','R','contact','2루'), B('이병규','L','contact','외야'), B('양준혁','L','patient','지명'),
+    B('이승엽','L','power','1루'), B('심정수','R','power','외야'), B('김동주','R','power','3루'),
+    B('박재홍','R','power','외야'), B('박경완','R','guess','포수'), B('박진만','R','average','유격') ] },
+  { key: 'y2010', name: '2010년대', closer: '오승환',
+    pitchers: [['류현진','L'],['윤석민','R'],['양현종','L'],['더스틴 니퍼트','R'],['오승환','R']], batters: [
+    B('서건창','L','contact','2루'), B('손아섭','L','contact','외야'), B('김현수','L','contact','외야'),
+    B('박병호','R','power','1루'), B('이대호','R','power','지명'), B('최형우','L','power','외야'),
+    B('최정','R','power','3루'), B('양의지','R','guess','포수'), B('김하성','R','average','유격') ] },
+  { key: 'y2020', name: '2020년대', closer: '정해영',
+    pitchers: [['코디 폰세','R'],['안우진','R'],['원태인','R'],['곽빈','R'],['정해영','R']], batters: [
+    B('김혜성','L','contact','2루'), B('이정후','L','contact','외야'), B('김도영','R','power','3루'),
+    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','지명'),
+    B('양의지','R','guess','포수'), B('손아섭','L','contact','외야'), B('오지환','L','average','유격') ] },
+  { key: 'y2026', name: '2026 시즌', closer: '곽빈',
+    pitchers: [['곽빈','R'],['최민석','R']], batters: [
+    B('박찬호','R','aggro','유격'), B('서건창','L','contact','지명'), B('김도영','R','power','외야'),
+    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','3루'),
+    B('양의지','R','guess','포수'), B('빅터 레이예스','L','contact','외야'), B('박준순','R','aggro','2루') ] },
+  { key: 'active', name: '현역 최강', closer: '정해영',
+    pitchers: [['곽빈','R'],['원태인','R'],['류현진','L'],['임찬규','R'],['정해영','R']], batters: [
+    B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('김도영','R','power','3루'),
+    B('강백호','L','power','1루'), B('최형우','L','power','지명'), B('구자욱','L','power','외야'),
+    B('양의지','R','guess','포수'), B('최정','R','power','3루'), B('박찬호','R','aggro','유격') ] },
 ];
+const LINEUP = TEAMS[0].batters;
 function applyBatter(p, type) {
   const t = BATTER_TYPES[type]; if (!t) return p;
   const q = { ...p }; let s = 0;
@@ -606,7 +636,7 @@ return {
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
-  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,

@@ -190,7 +190,29 @@
   }
   #game-end .ge-title { font-family:'Special Elite', monospace; font-size:40px; letter-spacing:0.12em; color:#fff; }
   #game-end .ge-sub { font-size:14px; color:#aab2c0; font-weight:600; text-align:center; line-height:1.6; }
+  #game-setup {
+    display:none; position:absolute; inset:0; flex-direction:column; gap:10px; padding:14px 12px; overflow-y:auto;
+    background:rgba(5,7,12,0.94); backdrop-filter:blur(3px);
+  }
+  #game-setup h3 { font-family:'Special Elite', monospace; font-size:20px; letter-spacing:0.1em; color:#fff; font-weight:400; text-align:center; margin-bottom:2px; }
+  #game-setup .lb { font-size:11px; font-weight:800; letter-spacing:0.08em; color:#5a8fd4; margin-top:4px; }
+  #game-setup .lb.opp { color:#ff9a3d; }
+  #game-setup .row { display:flex; flex-wrap:wrap; gap:6px; }
+  #game-setup .t-chip {
+    font-size:12.5px; font-weight:700; padding:7px 10px; border-radius:16px;
+    background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
+  }
+  #game-setup .t-chip.on { border-color:#5a8fd4; color:#fff; background:linear-gradient(180deg,#243150,#1b2433); }
+  #game-setup .row.opp .t-chip.on { border-color:#ff9a3d; }
+  #game-setup .t-chip small { color:#7a8290; font-weight:600; margin-left:3px; }
+  #game-setup .roster { font-size:11px; color:#8a93a3; line-height:1.5; }
+  #game-setup .roster small { color:#5e6675; font-size:9px; }
+  #game-setup .roster b { color:#dfe3e8; font-weight:700; }
+  #game-setup button#game-go {
+    margin-top:auto; flex:0 0 auto; font-size:17px; font-weight:800; padding:13px 0; border-radius:13px; border:none; background:#fff; color:#000;
+  }
   #game-end .ge-rec { font-size:12px; color:#7a8290; font-weight:600; }
+  #game-end button#game-team { margin-top:2px; font-size:13px; font-weight:700; padding:9px 18px; border-radius:11px; background:transparent; border:1.5px solid #3a4660; color:#aab2c0; }
   #game-end .ge-hits { display:flex; flex-direction:column; gap:6px; margin-top:4px; max-width:86%; }
   #game-end .ge-hits .lb { font-size:11px; color:#7a8290; font-weight:700; text-align:center; }
   #game-end .ge-hit {
@@ -243,12 +265,21 @@
     </div>
     <div id="game-msg"></div>
     <button id="throw-btn" disabled>투구</button>
+    <div id="game-setup">
+      <h3>MATCHUP</h3>
+      <div class="lb">내 팀</div><div class="row" id="su-my"></div>
+      <div class="lb">투수 (나)</div><div class="row" id="su-p"></div>
+      <div class="lb opp">상대 팀</div><div class="row opp" id="su-opp"></div>
+      <div class="roster" id="su-roster"></div>
+      <button id="game-go">플레이 볼</button>
+    </div>
     <div id="game-end">
       <div class="ge-title"></div>
       <div class="ge-sub"></div>
       <div class="ge-rec"></div>
       <div class="ge-hits"></div>
       <button id="game-again">다시 하기</button>
+      <button id="game-team">팀 바꾸기</button>
     </div>
   </div>
   <div id="controls">
@@ -556,17 +587,47 @@ const BATTER_TYPES = {
   aggro:    { ko: '적극적',  take: 0.7,  whiff: 1.2,  single: 1.05, double: 1.05, hr: 1.0,  read: 0.8, sit: 0.9 },
   average:  { ko: '평균',    take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.0,  hr: 1.0,  read: 1.0, sit: 1.0 },
 };
-const LINEUP = [
-  { name: '김도현', hand: 'L', type: 'contact' },
-  { name: '박민재', hand: 'R', type: 'patient' },
-  { name: '이준서', hand: 'L', type: 'guess' },
-  { name: '최현우', hand: 'R', type: 'power' },
-  { name: '정우진', hand: 'L', type: 'power' },
-  { name: '강태양', hand: 'R', type: 'average' },
-  { name: '윤지호', hand: 'R', type: 'aggro' },
-  { name: '한승민', hand: 'L', type: 'average' },
-  { name: '오세훈', hand: 'R', type: 'aggro' },
+// 상대 팀 7개 — 실제 선수 이름·좌우만 쓰고, 성향은 선수 스타일로 배정한 설계값 (실제 기록 데이터 아님).
+// 타순은 성향에 맞춰 짬. closer = 플레이어(투수) 이름으로 씀
+const B = (name, hand, type, pos) => ({ name, hand, type, pos });
+const TEAMS = [
+  { key: 'kbo_all', name: 'KBO 역대 최고', closer: '오승환',
+    pitchers: [['선동열','R'],['최동원','R'],['류현진','L'],['양현종','L'],['오승환','R']], batters: [
+    B('이종범','R','contact','유격'), B('정근우','R','contact','2루'), B('양준혁','L','patient','외야'),
+    B('이승엽','L','power','1루'), B('이대호','R','power','지명'), B('최정','R','power','3루'),
+    B('최형우','L','power','외야'), B('장효조','L','contact','외야'), B('양의지','R','guess','포수') ] },
+  { key: 'nc_all', name: 'NC 다이노스 역대', closer: '임창민',
+    pitchers: [['에릭 페디','R'],['드류 루친스키','R'],['구창모','L'],['찰리 쉬렉','R'],['임창민','R']], batters: [
+    B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('나성범','L','power','외야'),
+    B('에릭 테임즈','L','power','1루'), B('양의지','R','guess','포수'), B('박석민','R','power','3루'),
+    B('이호준','R','power','지명'), B('박건우','R','contact','외야'), B('손시헌','R','average','유격') ] },
+  { key: 'y2000', name: '2000년대', closer: '오승환',
+    pitchers: [['손민한','R'],['류현진','L'],['배영수','R'],['정민태','R'],['오승환','R']], batters: [
+    B('정근우','R','contact','2루'), B('이병규','L','contact','외야'), B('양준혁','L','patient','지명'),
+    B('이승엽','L','power','1루'), B('심정수','R','power','외야'), B('김동주','R','power','3루'),
+    B('박재홍','R','power','외야'), B('박경완','R','guess','포수'), B('박진만','R','average','유격') ] },
+  { key: 'y2010', name: '2010년대', closer: '오승환',
+    pitchers: [['류현진','L'],['윤석민','R'],['양현종','L'],['더스틴 니퍼트','R'],['오승환','R']], batters: [
+    B('서건창','L','contact','2루'), B('손아섭','L','contact','외야'), B('김현수','L','contact','외야'),
+    B('박병호','R','power','1루'), B('이대호','R','power','지명'), B('최형우','L','power','외야'),
+    B('최정','R','power','3루'), B('양의지','R','guess','포수'), B('김하성','R','average','유격') ] },
+  { key: 'y2020', name: '2020년대', closer: '정해영',
+    pitchers: [['코디 폰세','R'],['안우진','R'],['원태인','R'],['곽빈','R'],['정해영','R']], batters: [
+    B('김혜성','L','contact','2루'), B('이정후','L','contact','외야'), B('김도영','R','power','3루'),
+    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','지명'),
+    B('양의지','R','guess','포수'), B('손아섭','L','contact','외야'), B('오지환','L','average','유격') ] },
+  { key: 'y2026', name: '2026 시즌', closer: '곽빈',
+    pitchers: [['곽빈','R'],['최민석','R']], batters: [
+    B('박찬호','R','aggro','유격'), B('서건창','L','contact','지명'), B('김도영','R','power','외야'),
+    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','3루'),
+    B('양의지','R','guess','포수'), B('빅터 레이예스','L','contact','외야'), B('박준순','R','aggro','2루') ] },
+  { key: 'active', name: '현역 최강', closer: '정해영',
+    pitchers: [['곽빈','R'],['원태인','R'],['류현진','L'],['임찬규','R'],['정해영','R']], batters: [
+    B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('김도영','R','power','3루'),
+    B('강백호','L','power','1루'), B('최형우','L','power','지명'), B('구자욱','L','power','외야'),
+    B('양의지','R','guess','포수'), B('최정','R','power','3루'), B('박찬호','R','aggro','유격') ] },
 ];
+const LINEUP = TEAMS[0].batters;
 function applyBatter(p, type) {
   const t = BATTER_TYPES[type]; if (!t) return p;
   const q = { ...p }; let s = 0;
@@ -878,7 +939,7 @@ return {
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
-  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
@@ -1148,7 +1209,7 @@ return {
       view=t.dataset.v;
       const game = view==='game';
       const show = (view==='front'||view==='side'||game) ? 'flex':'none';
-      $('hand-wrap').style.display=show;
+      $('hand-wrap').style.display = game ? 'none' : show;
       $('bat-btn').style.display = view==='front' ? 'block':'none';
       $('matchup').style.display = view==='front' ? 'block':'none';
       $('cmp-bar').style.display = view==='side' ? 'flex':'none';
@@ -2516,8 +2577,29 @@ return {
   ];
   const GAME_PITCH_MAP=Object.fromEntries(GAME_PITCHES);
 
-  // 타자 9명 — 이름·좌우·성향은 엔진(engine.js LINEUP / BATTER_TYPES)에
-  const LINEUP = E ? E.LINEUP : [];
+  // 팀·투수 선택 (localStorage 에 기억). LINEUP = 고른 상대 팀 타자 9명
+  const SETUP_KEY='pb_inning_setup';
+  const setup = Object.assign({ my:'kbo_all', pitcher:0, opp:'y2010' }, (()=>{ try{ return JSON.parse(localStorage.getItem(SETUP_KEY)||'{}'); }catch(e){ return {}; } })());
+  const teamOf = (k)=> (E ? E.TEAMS.find(t=>t.key===k) : null) || (E ? E.TEAMS[0] : null);
+  let LINEUP = E ? teamOf(setup.opp).batters : [];
+  function myPitcher(){ const t=teamOf(setup.my); const p=t.pitchers[Math.min(setup.pitcher, t.pitchers.length-1)]; return { name:p[0], hand:p[1], team:t }; }
+  function applySetup(){
+    LINEUP = teamOf(setup.opp).batters;
+    const p=myPitcher(); lefty = p.hand==='L';
+    try{ localStorage.setItem(SETUP_KEY, JSON.stringify(setup)); }catch(e){}
+  }
+  function renderSetup(){
+    const mk=(row, items, onKey, onClick)=>{ row.innerHTML=''; items.forEach((it,i)=>{ const c=document.createElement('div'); c.className='t-chip'+(it.on?' on':''); c.innerHTML=it.html; c.addEventListener('click',()=>{ onClick(i); renderSetup(); }); row.appendChild(c); }); };
+    mk($('su-my'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.my})), null, (i)=>{ setup.my=E.TEAMS[i].key; setup.pitcher=0; });
+    const my=teamOf(setup.my);
+    mk($('su-p'), my.pitchers.map((p,i)=>({html:p[0]+'<small>'+(p[1]==='L'?'좌':'우')+'</small>', on:i===Math.min(setup.pitcher,my.pitchers.length-1)})), null, (i)=>{ setup.pitcher=i; });
+    mk($('su-opp'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.opp})), null, (i)=>{ setup.opp=E.TEAMS[i].key; });
+    const opp=teamOf(setup.opp);
+    $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':'우')+'</small>').join(' · ');
+  }
+  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('throw-btn').style.display='none'; }
+  function hideSetup(){ $('game-setup').style.display='none'; $('throw-btn').style.display='block'; }
+  $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); newGame(); });
 
   const RESULT_TXT={
     ball:['볼',''], called:['스트라이크','루킹'], whiff:['스트라이크','헛스윙'], foul:['파울',''],
@@ -2574,7 +2656,7 @@ return {
     mode='real';
     throwT=-1; path=[]; pathDone=false; absCross=null; trail=[];
     if(!TABLE){ showMsg('확률표가 없습니다', 'tools/build.js 를 돌려주세요', '#ff5a5a'); return; }
-    if(!game.inning) newGame();
+    if(!game.inning){ applySetup(); showSetup(); }
     else {
       cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD();
       if(game.phase==='over') showEnd();
@@ -2587,6 +2669,7 @@ return {
     cur=dexCur; updateInfo();
     $('game-msg').style.display='none';
     $('game-end').style.display='none';
+    $('game-setup').style.display='none';
   }
 
   function newGame(){
@@ -2605,7 +2688,8 @@ return {
     updateMatchup();
     cur=GAME_PITCH_MAP[gamePitch]; updateInfo();
     $('game-end').style.display='none';
-    showMsg('구종을 고르고 존을 누른 뒤, 투구', '9회말 3:2 · 1사 1·2루 · 동점이면 연장', '#aab2c0');
+    const mp=myPitcher();
+    showMsg('구종을 고르고 존을 누른 뒤, 투구', '상대 '+teamOf(setup.opp).name+' · 당신은 '+mp.name+' ('+(mp.hand==='L'?'좌투':'우투')+') · 9회말 3:2 1사 1·2루', '#aab2c0');
     updateHUD();
   }
 
@@ -2964,6 +3048,7 @@ return {
     doThrow('real');
   }
   $('game-again').addEventListener('click', ()=>newGame());
+  $('game-team').addEventListener('click', ()=>{ game.inning=null; showSetup(); });
 
   // ═════ 도감 타자 시점: 실측으로 "어디가 좋은가 · 이 조합 · 앞에 뭘 던지나" ═════
   const DEX_CODE={ '4seam':'FF', '2seam':'SI', 'cutter':'FC', 'slider':'SL', 'sweeper':'ST', 'curve':'CU', 'change':'CH', 'splitter':'FS', 'sinker':'SI', 'kcurve':'KC', 'slurve':'SV' };
