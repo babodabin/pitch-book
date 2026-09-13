@@ -139,6 +139,7 @@
   /* ── 한 이닝 게임 ── */
   #page.game #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 게임: 화면 아래까지 */
   #page.game #detail { display:none; }
+  #page.front #canvas-box { height:calc(100vh - 310px); height:calc(100dvh - 310px); min-height:440px; }  /* 타자 시점도 크게 (실전/학습 버튼은 보이게) */
   #game-bar { display:none; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px; -webkit-overflow-scrolling:touch; }
   #game-bar::-webkit-scrollbar { display:none; }
   #game-hud {
@@ -1044,6 +1045,7 @@ return {
       $('throw-btn').style.display = game ? 'block':'none';
       document.querySelector('.d-card.course').style.display = game ? 'none':'block';
       $('page').classList.toggle('game', game);
+      $('page').classList.toggle('front', view==='front');
       resize();
       if(game){ if(!wasGame) enterGame(); return; }
       if(wasGame) leaveGame();
@@ -2813,6 +2815,7 @@ return {
     step(){ if(game.phase==='flying'){ pathDone=true; onArrive(); } } };  // 디버그용
   $('hand-btn').addEventListener('click', ()=>{ if(view==='game' && game.inning) updateHUD(); });
 
+  $('page').classList.add('front');
   resize();
   updateInfo();
   updateMatchup();
