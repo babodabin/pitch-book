@@ -1,5 +1,5 @@
 // 구종 도감 — 오프라인 캐시
-const CACHE = 'pitch-v15';
+const CACHE = 'pitch-v16';
 const CORE = ['./index.html','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install', event => {

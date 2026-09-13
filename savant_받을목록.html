@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statcast 수집 목록</title>
+<style>
+  :root{
+    --dirt:#B0764A;
+    --dirt-deep:#8A5733;
+    --chalk:#FBFAF7;
+    --grass:#2F6B42;
+    --ink:#241C16;
+    --faint:#8C8078;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:28px 18px 64px;
+    background:var(--chalk);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:560px;margin:0 auto}
+  h1{
+    font-size:27px; line-height:1.25; font-weight:750;
+    margin:0 0 6px; letter-spacing:-.02em;
+  }
+  .sub{color:var(--faint); font-size:14.5px; line-height:1.6; margin:0 0 4px}
+  .done{
+    margin:22px 0 10px; padding:13px 15px;
+    border:1px solid #DCE6DD; border-radius:11px;
+    background:#F1F7F2; color:var(--grass);
+    font-size:14.5px; font-weight:600;
+  }
+  .done span{display:block;font-weight:400;color:#5E7A66;margin-top:3px;font-size:13.5px}
+  .season{
+    display:flex; align-items:baseline; gap:9px;
+    margin:30px 0 11px; padding-bottom:8px;
+    border-bottom:2px solid var(--dirt);
+  }
+  .season b{font-size:19px; font-weight:750; letter-spacing:-.01em}
+  .season em{font-style:normal; color:var(--faint); font-size:13.5px}
+  a.row{
+    display:flex; align-items:center; gap:13px;
+    padding:15px 16px; margin-bottom:9px;
+    background:#fff; border:1px solid #E8E1D9; border-radius:12px;
+    text-decoration:none; color:inherit;
+    box-shadow:0 1px 0 rgba(36,28,22,.04);
+  }
+  a.row:active{background:#FAF5EF; border-color:var(--dirt)}
+  a.row:focus-visible{outline:2.5px solid var(--dirt); outline-offset:2px}
+  .num{
+    flex:0 0 34px; height:34px; border-radius:50%;
+    background:var(--dirt); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14.5px; font-weight:700;
+  }
+  .when{flex:1}
+  .when b{display:block; font-size:16.5px; font-weight:650; letter-spacing:-.01em}
+  .when i{display:block; font-style:normal; font-size:13px; color:var(--faint); margin-top:2px}
+  .get{color:var(--dirt-deep); font-size:14px; font-weight:650; flex:0 0 auto}
+  .note{
+    margin-top:34px; padding:16px 17px;
+    background:#F6F1EA; border-radius:12px;
+    font-size:14px; line-height:1.75; color:#4B4039;
+  }
+  .note b{color:var(--ink)}
+  .note p{margin:0 0 9px}
+  .note p:last-child{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Statcast 수집 목록</h1>
+  <p class="sub">눌러서 하나씩 받은 뒤, 대화에 올리면 됩니다. 파일 하나에 1만 4천 구 안팎이고, 11개를 다 받으면 약 15만 구가 됩니다.</p>
+
+  <div class="done">
+    받음 · 2026년 4월 1–4일
+    <span>savant_data_8.csv · 14,134구</span>
+  </div>
+
+  <div class="season"><b>2026</b><em>남은 3개</em></div>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2026%7C&game_date_gt=2026-06-05&game_date_lt=2026-06-08&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">1</span>
+    <span class="when"><b>6월 5–8일</b><i>2026</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2026%7C&game_date_gt=2026-07-10&game_date_lt=2026-07-13&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">2</span>
+    <span class="when"><b>7월 10–13일</b><i>2026</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2026%7C&game_date_gt=2026-08-14&game_date_lt=2026-08-17&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">3</span>
+    <span class="when"><b>8월 14–17일</b><i>2026</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <div class="season"><b>2025</b><em>4개</em></div>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2025%7C&game_date_gt=2025-04-11&game_date_lt=2025-04-14&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">4</span>
+    <span class="when"><b>4월 11–14일</b><i>2025</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2025%7C&game_date_gt=2025-06-06&game_date_lt=2025-06-09&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">5</span>
+    <span class="when"><b>6월 6–9일</b><i>2025</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2025%7C&game_date_gt=2025-07-18&game_date_lt=2025-07-21&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">6</span>
+    <span class="when"><b>7월 18–21일</b><i>2025</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2025%7C&game_date_gt=2025-08-15&game_date_lt=2025-08-18&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">7</span>
+    <span class="when"><b>8월 15–18일</b><i>2025</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <div class="season"><b>2024</b><em>4개</em></div>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2024%7C&game_date_gt=2024-04-12&game_date_lt=2024-04-15&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">8</span>
+    <span class="when"><b>4월 12–15일</b><i>2024</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2024%7C&game_date_gt=2024-06-07&game_date_lt=2024-06-10&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">9</span>
+    <span class="when"><b>6월 7–10일</b><i>2024</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2024%7C&game_date_gt=2024-07-19&game_date_lt=2024-07-22&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">10</span>
+    <span class="when"><b>7월 19–22일</b><i>2024</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <a class="row" href="https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&hfGT=R%7C&hfSea=2024%7C&game_date_gt=2024-08-16&game_date_lt=2024-08-19&player_type=pitcher&min_pitches=0&min_results=0&group_by=name&sort_col=pitches&player_event_sort=api_p_release_speed&sort_order=desc">
+    <span class="num">11</span>
+    <span class="when"><b>8월 16–19일</b><i>2024</i></span>
+    <span class="get">받기</span>
+  </a>
+
+  <div class="note">
+    <p><b>받아지는 파일 이름이 다 같습니다.</b> savant_data.csv로 저장되니 받는 순서대로 번호를 붙여두면 헷갈리지 않습니다.</p>
+    <p><b>2023년 이전은 넣지 않았습니다.</b> 스위퍼 분류가 자리잡기 전이라 슬라이더에 묻힙니다.</p>
+    <p><b>한 번에 다 받지 않아도 됩니다.</b> 몇 개씩 받아 올리면 그때그때 집계합니다.</p>
+  </div>
+
+</div>
+</body>
+</html>

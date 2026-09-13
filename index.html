@@ -67,7 +67,7 @@
   #tabs { display:flex; gap:8px; padding:0 16px 10px 16px; }
   .tab {
     flex:1; text-align:center;
-    font-size:16px; font-weight:700;
+    font-size:15px; font-weight:700;
     padding:11px 0; border-radius:12px;
     background:#10141d; border:1.5px solid #2a3242; color:#aab2c0;
   }
@@ -135,6 +135,52 @@
   .d-card .tx { font-size:16px; line-height:1.65; color:#cdd4e0; }
   .d-card.use .lb { color:#52e07a; }
   .d-card.course .lb { color:#ff9a3d; }
+
+  /* ── 한 이닝 게임 ── */
+  #page.game #canvas-box { height:60vh; }   /* 게임: 존 밖 아래 칸까지 보이게 조금 더 높게 */
+  #game-bar { display:none; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px; -webkit-overflow-scrolling:touch; }
+  #game-bar::-webkit-scrollbar { display:none; }
+  #game-hud {
+    display:none; position:absolute; left:10px; top:10px;
+    padding:8px 11px; border-radius:10px;
+    background:rgba(10,16,28,0.86); border:1.5px solid #3a4660; color:#dfe3e8;
+    backdrop-filter:blur(4px); font-size:13px; font-weight:700; line-height:1.5; min-width:118px;
+  }
+  #game-hud .gh-inn { color:#7a8290; font-size:11px; font-weight:600; }
+  #game-hud .gh-score { font-size:18px; font-weight:800; letter-spacing:0.04em; margin-left:6px; }
+  #game-hud .gh-row { display:flex; align-items:center; gap:8px; }
+  #game-hud .gh-bases { position:relative; width:30px; height:22px; flex:0 0 auto; }
+  #game-hud .gh-bases i {
+    position:absolute; width:9px; height:9px; transform:rotate(45deg);
+    border:1.5px solid #8a93a3; background:transparent;
+  }
+  #game-hud .gh-bases i.on { background:#ffd23b; border-color:#ffd23b; box-shadow:0 0 6px rgba(255,210,59,0.6); }
+  #game-hud .gh-bases .b2 { left:10px; top:0; }
+  #game-hud .gh-bases .b1 { left:19px; top:9px; }
+  #game-hud .gh-bases .b3 { left:1px; top:9px; }
+  #game-hud .gh-outs { color:#ff9a3d; }
+  #game-hud .gh-count b { display:inline-block; width:8px; height:8px; border-radius:50%; border:1.5px solid #8a93a3; margin-right:2px; vertical-align:-1px; }
+  #game-hud .gh-count b.on.b { background:#52e07a; border-color:#52e07a; }
+  #game-hud .gh-count b.on.s { background:#ff5a5a; border-color:#ff5a5a; }
+  #game-hud .gh-bat { color:#aab2c0; font-size:12px; font-weight:600; }
+  #game-msg {
+    display:none; position:absolute; right:10px; top:56px; max-width:60%; white-space:nowrap;
+    padding:8px 14px; border-radius:12px;
+    background:rgba(8,13,24,0.90); border:1.5px solid #3a4660; color:#fff;
+    font-size:16px; font-weight:800; letter-spacing:0.02em; text-align:center; line-height:1.3;
+  }
+  #game-msg small { display:block; font-size:11px; font-weight:600; color:#8a93a3; letter-spacing:0; }
+  #game-end {
+    display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; gap:12px;
+    background:rgba(5,7,12,0.78); backdrop-filter:blur(3px);
+  }
+  #game-end .ge-title { font-family:'Special Elite', monospace; font-size:40px; letter-spacing:0.12em; color:#fff; }
+  #game-end .ge-sub { font-size:14px; color:#aab2c0; font-weight:600; text-align:center; line-height:1.6; }
+  #game-end button {
+    margin-top:6px; font-size:16px; font-weight:800; padding:12px 28px; border-radius:13px; border:none;
+    background:#fff; color:#000;
+  }
+  #game-end button:active { transform:translateY(2px); }
 </style>
 </head>
 <body>
@@ -144,6 +190,7 @@
     <div class="sub">구종 도감</div>
   </header>
   <div id="pitch-bar"></div>
+  <div id="game-bar"></div>
   <div id="info">
     <div id="p-name"></div>
     <div id="p-speed"></div>
@@ -152,6 +199,7 @@
     <div class="tab on" data-v="front">타자 시점</div>
     <div class="tab" data-v="side">움직임 분석</div>
     <div class="tab" data-v="grip">그립</div>
+    <div class="tab" data-v="game">한 이닝</div>
   </div>
   <div id="cmp-bar"><span class="cmp-lb">비교</span></div>
   <div id="canvas-box">
@@ -161,6 +209,21 @@
       <button id="bat-btn">🔴 우타자</button>
     </div>
     <div id="matchup"></div>
+    <div id="game-hud">
+      <div><span class="gh-inn">9회말</span><span class="gh-score">3 : 2</span></div>
+      <div class="gh-row">
+        <span class="gh-bases"><i class="b2"></i><i class="b1"></i><i class="b3"></i></span>
+        <span class="gh-outs">1아웃</span>
+      </div>
+      <div class="gh-count"></div>
+      <div class="gh-bat"></div>
+    </div>
+    <div id="game-msg"></div>
+    <div id="game-end">
+      <div class="ge-title"></div>
+      <div class="ge-sub"></div>
+      <button id="game-again">다시 하기</button>
+    </div>
   </div>
   <div id="controls">
     <button class="mode-btn" id="real-btn">실전 ▶ 실제 속도</button>
@@ -179,6 +242,374 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 </script>
+<!-- GAME:ENGINE:START -->
+<script>
+// 한 이닝 게임 엔진 — 순수 함수만. 파일·화면 없음.
+// Node(시뮬)와 브라우저(index.html에 인라인) 양쪽에서 같은 파일을 쓴다.
+//
+// 흐름:  고른 (구종, 칸)  →  실투 흔들림  →  실제 도달점  →  칸 확률표에서 결과 뽑기  →  카운트 갱신
+//
+// 확률표: 얇은 칸은 상위 칸으로 물러난다 (경험적 베이즈 수축)
+//   칸 (구종×zone×좌우)  ←  구종×zone (좌우 합침)  ←  구종 전체
+//   p = (칸 건수 + K × 상위 확률) / (칸 구수 + K)     K = PRIOR_WEIGHT
+// 카운트 보정: 같은 CSV의 카운트별×존안팎 결과 분포로 배수를 곱한다 (타자의 카운트 반응)
+//
+// 단위: 미터. 포수 시점에서 x<0 이 왼쪽(3루쪽), z 는 높이.
+
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.PitchEngine = factory();
+}(typeof self !== 'undefined' ? self : this, function () {
+'use strict';
+
+const PITCH_TYPES = ['FF', 'SI', 'FC', 'SL', 'ST', 'CU', 'KC', 'CH', 'FS', 'SV'];
+const ZONES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14];
+const HANDS = ['RR', 'RL', 'LR', 'LL'];
+const RESULTS = ['ball', 'called', 'whiff', 'foul', 'out', 'single', 'double', 'hr'];
+// 확률표 안에서는 볼·루킹을 "안 휘두름(take)" 하나로 합친다. 볼/루킹은 도달점을 ABS 가 가른다.
+const PROB_KEYS = ['take', 'whiff', 'foul', 'out', 'single', 'double', 'hr'];
+const IN_PLAY = new Set(['out', 'single', 'double', 'hr']);
+
+const PRIOR_WEIGHT = 50; // 상위 칸을 몇 구짜리 표본으로 칠지 (설계값)
+
+// ---------- 존 좌표 (미터) — 도감 index.html 의 ZONE_W / ZONE_BOT / ZONE_TOP 과 같음 ----------
+const ZONE_GEOM = {
+  halfW: 0.215,          // 홈플레이트 43cm / 2
+  bot: 0.50, top: 1.05,
+  offOut: 0.14,          // 존 밖 칸을 노릴 때 존 가장자리에서 얼마나 바깥을 겨누는지
+};
+
+// 칸 번호 → 노리는 점
+function zoneTarget(zone) {
+  const g = ZONE_GEOM;
+  const cw = (2 * g.halfW) / 3, ch = (g.top - g.bot) / 3;
+  if (zone <= 9) {
+    const col = (zone - 1) % 3, row = Math.floor((zone - 1) / 3); // row 0 = 위
+    return { x: -g.halfW + cw * (col + 0.5), z: g.top - ch * (row + 0.5) };
+  }
+  const left = zone === 11 || zone === 13, up = zone === 11 || zone === 12;
+  return { x: (left ? -1 : 1) * (g.halfW + g.offOut), z: up ? g.top + g.offOut : g.bot - g.offOut };
+}
+
+// 점 → 칸 번호
+function pointToZone(x, z) {
+  const g = ZONE_GEOM;
+  if (Math.abs(x) <= g.halfW && z >= g.bot && z <= g.top) {
+    const col = Math.min(2, Math.floor((x + g.halfW) / (2 * g.halfW / 3)));
+    const row = Math.min(2, Math.floor((g.top - z) / ((g.top - g.bot) / 3)));
+    return row * 3 + col + 1;
+  }
+  const mid = (g.top + g.bot) / 2;
+  if (z >= mid) return x < 0 ? 11 : 12;
+  return x < 0 ? 13 : 14;
+}
+
+// ---------- 실투 흔들림 (구종별 표준편차, 미터) — 설계값 ----------
+const WOBBLE = {
+  FF: 0.09, SI: 0.10, FC: 0.10, SL: 0.12, ST: 0.14,
+  CU: 0.17, KC: 0.17, CH: 0.13, FS: 0.17, SV: 0.15,
+};
+const WOBBLE_SCALE = 0.5; // 3단계 결과로 절반에서 시작. 6단계에서 조정
+
+function gauss(rng) {
+  let u = 0, v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// 노린 칸 → 실제 도달점
+function applyWobble(pitchType, zone, rng, scale) {
+  if (scale === undefined) scale = WOBBLE_SCALE;
+  const t = zoneTarget(zone);
+  const s = WOBBLE[pitchType] * scale;
+  const x = t.x + gauss(rng) * s, z = t.z + gauss(rng) * s;
+  return { zone: pointToZone(x, z), x, z };
+}
+
+// ---------- 확률표 ----------
+function emptyCounts() { const c = { n: 0 }; for (const r of PROB_KEYS) c[r] = 0; return c; }
+
+// 원본 칸 {n, ball, called, ...} → take 로 합친 건수
+function takeCounts(c) {
+  const o = { n: c.n, take: c.ball + c.called };
+  for (const r of PROB_KEYS) if (r !== 'take') o[r] = c[r];
+  return o;
+}
+
+function normalize(counts, n) {
+  const p = {};
+  for (const r of PROB_KEYS) p[r] = n ? counts[r] / n : 0;
+  return p;
+}
+
+function shrink(counts, n, prior, k) {
+  const p = {};
+  for (const r of PROB_KEYS) p[r] = (counts[r] + k * prior[r]) / (n + k);
+  return p;
+}
+
+function sumCells(list) {
+  const s = emptyCounts();
+  for (const c of list) { s.n += c.n; for (const r of PROB_KEYS) s[r] += c[r]; }
+  return s;
+}
+
+// 카운트 보정 배수: adj["b-s|in"][result] = p(result | 카운트, 존안팎) / p(result | 존안팎)
+function buildCountAdjust(byCount) {
+  const base = { in: emptyCounts(), out: emptyCounts() };
+  const tc = {};
+  for (const [k, c] of Object.entries(byCount)) {
+    const io = k.split('|')[1];
+    tc[k] = takeCounts(c);
+    base[io].n += c.n; for (const r of PROB_KEYS) base[io][r] += tc[k][r];
+  }
+  const adj = {};
+  for (const [k, c] of Object.entries(tc)) {
+    const io = k.split('|')[1];
+    adj[k] = {};
+    for (const r of PROB_KEYS) {
+      const pc = (c[r] + 1) / (c.n + PROB_KEYS.length);          // 라플라스 (0 나누기 방지)
+      const pb = (base[io][r] + 1) / (base[io].n + PROB_KEYS.length);
+      adj[k][r] = pc / pb;
+    }
+  }
+  return adj;
+}
+
+function adjustByCount(p, adj, balls, strikes, zone) {
+  const a = adj[`${balls}-${strikes}|${zone <= 9 ? 'in' : 'out'}`];
+  if (!a) return p;
+  const q = {}; let s = 0;
+  for (const r of PROB_KEYS) { q[r] = p[r] * a[r]; s += q[r]; }
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
+// 칸 데이터는 객체 {n, ball, ...} 또는 압축 배열 [n, ball, called, ...] 둘 다 받는다
+function cellObj(c) {
+  if (!Array.isArray(c)) return c;
+  const o = { n: c[0] };
+  RESULTS.forEach((r, i) => { o[r] = c[i + 1]; });
+  return o;
+}
+
+// pitch_table.json → { probs[key], ns[key], level[key], countAdj, byCount, ... }
+function buildTable(json, priorWeight = PRIOR_WEIGHT) {
+  const cells = {}, tcells = {};
+  for (const k in json.cells) { cells[k] = cellObj(json.cells[k]); tcells[k] = takeCounts(cells[k]); }
+  const byCount = json.by_count ? Object.fromEntries(Object.entries(json.by_count).map(([k, c]) => [k, cellObj(c)])) : null;
+  const probs = {}, ns = {}, level = {};
+  const all = sumCells(Object.values(tcells));
+  const pAll = normalize(all, all.n);
+  const countAdj = byCount ? buildCountAdjust(byCount) : null;
+
+  for (const pt of PITCH_TYPES) {
+    const ptCells = [];
+    for (const z of ZONES) for (const h of HANDS) ptCells.push(tcells[`${pt}|${z}|${h}`]);
+    const ptSum = sumCells(ptCells);
+    const pPt = shrink(ptSum, ptSum.n, pAll, priorWeight);
+
+    for (const z of ZONES) {
+      const zSum = sumCells(HANDS.map((h) => tcells[`${pt}|${z}|${h}`]));
+      const pZone = shrink(zSum, zSum.n, pPt, priorWeight);
+
+      for (const h of HANDS) {
+        const key = `${pt}|${z}|${h}`;
+        const c = tcells[key];
+        probs[key] = shrink(c, c.n, pZone, priorWeight);
+        ns[key] = c.n;
+        level[key] = c.n >= 200 ? '칸' : zSum.n >= 200 ? '구종×존' : '구종';
+      }
+    }
+  }
+  return { probs, ns, level, cells, countAdj, byCount, pitchTypes: PITCH_TYPES, zones: ZONES, hands: HANDS };
+}
+
+function sampleResult(p, rng) {
+  let r = rng();
+  for (const k of PROB_KEYS) { r -= p[k]; if (r < 0) return k; }
+  return PROB_KEYS[PROB_KEYS.length - 1];
+}
+
+// ---------- 타석 (투구 하나씩) ----------
+function startPA(hands) {
+  return { balls: 0, strikes: 0, hands, history: [], outcome: null };
+}
+
+// 투구 하나. pick = { pitchType, zone }
+// 옵션: wobble (기본 true), wobbleScale, countAdjust (기본 true), rng,
+//       judge(x, z) → true=스트라이크 : 안 휘두른 공의 볼/루킹을 가르는 판정 (도감 ABS를 넘겨줌)
+// 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome }  outcome 은 타석이 끝났을 때만
+function throwPitch(table, st, pick, opts = {}) {
+  const rng = opts.rng || Math.random;
+  const wobble = opts.wobble !== false;
+  const countAdjust = opts.countAdjust !== false && table.countAdj;
+
+  const aimPt = zoneTarget(pick.zone);
+  const land = wobble ? applyWobble(pick.pitchType, pick.zone, rng, opts.wobbleScale)
+                      : { zone: pick.zone, x: aimPt.x, z: aimPt.z };
+  const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
+  let p = table.probs[key];
+  if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
+  let result = sampleResult(p, rng);
+  if (result === 'take') {
+    const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
+    result = strike ? 'called' : 'ball';
+  }
+
+  const rec = { pitchType: pick.pitchType, aim: pick.zone, zone: land.zone, x: land.x, z: land.z,
+                result, count: `${st.balls}-${st.strikes}`, outcome: null };
+
+  if (IN_PLAY.has(result)) rec.outcome = result;
+  else if (result === 'ball') { st.balls++; if (st.balls === 4) rec.outcome = 'walk'; }
+  else if (result === 'foul') { if (st.strikes < 2) st.strikes++; }
+  else { st.strikes++; if (st.strikes === 3) rec.outcome = 'strikeout'; }
+
+  st.history.push(rec);
+  if (rec.outcome) st.outcome = rec.outcome;
+  return rec;
+}
+
+// 타석 하나를 끝까지. choose(state) → { pitchType, zone }
+function simulatePA(table, hands, choose, opts = {}) {
+  const st = startPA(hands);
+  for (let i = 0; i < 30; i++) {
+    const rec = throwPitch(table, st, choose(st), opts);
+    if (rec.outcome) return { outcome: rec.outcome, pitches: st.history };
+  }
+  return { outcome: 'out', pitches: st.history }; // 30구 넘어가면 강제 종료 (실제론 안 옴)
+}
+
+// ---------- 이닝 ----------
+// 주자 진루 규칙 (설계값)
+const RUNNER_RULES = {
+  singleScoreFrom2: 0.60,  // 단타 때 2루 주자가 홈까지 올 확률 (아니면 3루)
+  doubleScoreFrom1: 0.45,  // 2루타 때 1루 주자가 홈까지 올 확률 (아니면 3루)
+  sacFly: 0.25,            // 2사 전 아웃 때 3루 주자가 득점할 확률
+};
+
+// 시작 상황: 9회말 3:2 리드, 1사 1·2루 → 무실점으로 3아웃이면 승리
+const START = { outs: 1, bases: [true, true, false] }; // [1루, 2루, 3루]
+
+function startInning() {
+  return { outs: START.outs, bases: START.bases.slice(), runs: 0 };
+}
+
+// 타석 결과 하나를 주자·아웃에 적용. 반환: 이번 타석 실점 (st.runs 에도 누적)
+function applyOutcome(st, outcome, rng = Math.random) {
+  const b = st.bases;
+  let runs = 0;
+  switch (outcome) {
+    case 'strikeout':
+      st.outs++; break;
+    case 'out':
+      if (st.outs < 2 && b[2] && rng() < RUNNER_RULES.sacFly) { runs++; b[2] = false; }
+      st.outs++; break;
+    case 'walk':
+      if (b[0] && b[1] && b[2]) runs++;
+      else if (b[0] && b[1]) b[2] = true;
+      else if (b[0]) b[1] = true;
+      b[0] = true; break;
+    case 'single': {
+      if (b[2]) runs++;
+      let to3 = false;
+      if (b[1]) { if (rng() < RUNNER_RULES.singleScoreFrom2) runs++; else to3 = true; }
+      st.bases = [true, b[0], to3]; break;
+    }
+    case 'double': {
+      if (b[2]) runs++;
+      if (b[1]) runs++;
+      let to3 = false;
+      if (b[0]) { if (rng() < RUNNER_RULES.doubleScoreFrom1) runs++; else to3 = true; }
+      st.bases = [false, true, to3]; break;
+    }
+    case 'hr':
+      runs += 1 + b.filter(Boolean).length;
+      st.bases = [false, false, false]; break;
+  }
+  st.runs += runs;
+  return runs;
+}
+
+function inningOver(st) { return st.outs >= 3 || st.runs > 0; }
+
+// 이닝 하나. batterHands(i) → 'R' | 'L' (i번째 타자), choose(state) → {pitchType, zone}
+function simulateInning(table, pitcherHand, batterHands, choose, opts = {}) {
+  const rng = opts.rng || Math.random;
+  const st = startInning();
+  const pas = [];
+  for (let i = 0; !inningOver(st); i++) {
+    const hands = pitcherHand + batterHands(i);
+    const pa = simulatePA(table, hands, choose, opts);
+    const r = applyOutcome(st, pa.outcome, rng);
+    pas.push({ hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: st.outs, bases: st.bases.slice() });
+  }
+  return { won: st.runs === 0, runs: st.runs, pas, outs: st.outs };
+}
+
+// ---------- 투수 정책 몇 가지 (검증용) ----------
+// 실제 사용 빈도대로 (구종, 칸) 을 뽑음 — 표를 그대로 되돌려 보는 용도
+// 카운트별 존 안/밖 비율을 따른다 (3볼이면 존 안, 0-2 면 존 밖이 늘어남) — 투수 쪽 카운트 반응
+function makeUsagePolicy(table, hands, rng = Math.random, byCount = table.byCount) {
+  const groups = { in: { keys: [], w: [], tot: 0 }, out: { keys: [], w: [], tot: 0 } };
+  for (const pt of PITCH_TYPES) for (const z of ZONES) {
+    const g = groups[z <= 9 ? 'in' : 'out'];
+    const n = table.ns[`${pt}|${z}|${hands}`];
+    g.keys.push({ pitchType: pt, zone: z }); g.w.push(n); g.tot += n;
+  }
+  const pick = (g) => {
+    let r = rng() * g.tot;
+    for (let i = 0; i < g.keys.length; i++) { r -= g.w[i]; if (r < 0) return g.keys[i]; }
+    return g.keys[g.keys.length - 1];
+  };
+  return (state) => {
+    let pIn = groups.in.tot / (groups.in.tot + groups.out.tot);
+    if (byCount && state) {
+      const a = byCount[`${state.balls}-${state.strikes}|in`], b = byCount[`${state.balls}-${state.strikes}|out`];
+      if (a && b && a.n + b.n > 0) pIn = a.n / (a.n + b.n);
+    }
+    return pick(rng() < pIn ? groups.in : groups.out);
+  };
+}
+
+function fixedPolicy(pitchType, zone) {
+  return () => ({ pitchType, zone });
+}
+
+function randomPolicy(rng = Math.random) {
+  return () => ({
+    pitchType: PITCH_TYPES[Math.floor(rng() * PITCH_TYPES.length)],
+    zone: ZONES[Math.floor(rng() * ZONES.length)],
+  });
+}
+
+// 시드 난수 (재현용)
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+return {
+  PITCH_TYPES, ZONES, HANDS, RESULTS, PROB_KEYS, IN_PLAY, PRIOR_WEIGHT, WOBBLE, WOBBLE_SCALE, ZONE_GEOM,
+  zoneTarget, pointToZone, applyWobble,
+  buildTable, buildCountAdjust, adjustByCount, sampleResult,
+  startPA, throwPitch, simulatePA,
+  RUNNER_RULES, START, startInning, applyOutcome, inningOver, simulateInning,
+  makeUsagePolicy, fixedPolicy, randomPolicy, mulberry32,
+};
+}));
+</script>
+<!-- GAME:ENGINE:END -->
+<!-- GAME:DATA:START -->
+<script>window.PITCH_TABLE={"generated":"2026-09-13","pitches":187106,"cells":{"FF|1|RR":[1093,0,252,199,378,193,43,14,14],"FF|1|RL":[1997,0,625,396,621,245,65,28,17],"FF|1|LR":[806,0,190,112,307,138,38,12,9],"FF|1|LL":[299,0,135,50,75,27,6,6,0],"FF|2|RR":[1683,0,261,320,665,313,77,23,24],"FF|2|RL":[2056,0,289,415,820,372,95,31,34],"FF|2|LR":[1174,0,162,236,482,205,57,18,14],"FF|2|LL":[387,0,67,79,139,70,19,9,4],"FF|3|RR":[1422,0,449,268,454,165,57,16,13],"FF|3|RL":[1220,0,241,166,497,238,44,16,18],"FF|3|LR":[874,0,268,167,296,98,22,14,9],"FF|3|LL":[258,0,47,53,92,43,12,5,6],"FF|4|RR":[881,0,186,84,276,214,73,26,22],"FF|4|RL":[1798,0,654,210,567,235,87,37,8],"FF|4|LR":[880,0,273,37,259,213,65,18,15],"FF|4|LL":[380,0,149,51,108,52,13,5,2],"FF|5|RR":[1587,0,350,180,564,297,109,43,44],"FF|5|RL":[2087,0,430,205,761,437,140,55,59],"FF|5|LR":[1064,0,204,88,383,267,72,25,25],"FF|5|LL":[406,0,98,57,124,82,27,9,9],"FF|6|RR":[1671,0,650,210,458,236,73,28,16],"FF|6|RL":[1440,0,401,103,455,325,79,37,40],"FF|6|LR":[783,0,251,108,256,104,38,19,7],"FF|6|LL":[220,0,49,28,83,44,11,4,1],"FF|7|RR":[348,0,178,12,57,70,22,8,1],"FF|7|RL":[709,0,455,28,104,77,30,10,5],"FF|7|LR":[438,0,254,15,84,61,13,6,5],"FF|7|LL":[219,0,145,11,32,18,10,3,0],"FF|8|RR":[777,0,375,45,164,124,45,14,10],"FF|8|RL":[1070,0,522,55,218,179,59,22,15],"FF|8|LR":[470,0,212,30,104,81,32,6,5],"FF|8|LL":[194,0,102,13,35,31,7,5,1],"FF|9|RR":[950,0,645,47,132,80,37,7,2],"FF|9|RL":[839,0,477,29,153,118,38,12,12],"FF|9|LR":[330,0,204,13,57,38,15,2,1],"FF|9|LL":[100,0,45,6,30,13,2,2,2],"FF|11|RR":[2743,1808,0,320,408,153,29,13,12],"FF|11|RL":[5677,4427,0,496,515,170,36,23,10],"FF|11|LR":[1669,1078,0,211,229,117,23,7,4],"FF|11|LL":[665,531,0,56,48,19,8,3,0],"FF|12|RR":[2967,2082,0,320,378,132,38,10,7],"FF|12|RL":[2502,1563,0,276,441,162,42,15,3],"FF|12|LR":[2643,1909,0,303,312,81,25,11,2],"FF|12|LL":[581,368,0,95,89,19,5,1,4],"FF|13|RR":[450,351,0,9,44,37,6,2,1],"FF|13|RL":[1150,1011,0,23,50,49,9,7,1],"FF|13|LR":[930,804,0,24,61,30,6,4,1],"FF|13|LL":[506,458,0,11,24,7,5,1,0],"FF|14|RR":[2252,2026,0,71,87,50,14,3,1],"FF|14|RL":[1616,1350,0,63,113,66,14,7,3],"FF|14|LR":[530,435,0,24,46,14,10,1,0],"FF|14|LL":[102,67,0,5,16,8,4,2,0],"SI|1|RR":[711,0,186,59,216,181,52,6,11],"SI|1|RL":[380,0,139,44,113,55,19,6,4],"SI|1|LR":[169,0,94,12,42,14,5,1,1],"SI|1|LL":[102,0,71,8,16,6,1,0,0],"SI|2|RR":[640,0,234,60,174,119,38,8,7],"SI|2|RL":[383,0,139,31,123,61,21,4,4],"SI|2|LR":[257,0,63,32,94,43,14,7,4],"SI|2|LL":[219,0,80,25,65,34,10,2,3],"SI|3|RR":[367,0,245,34,41,30,13,3,1],"SI|3|RL":[281,0,177,14,43,27,12,6,2],"SI|3|LR":[252,0,94,27,83,28,17,3,0],"SI|3|LL":[226,0,53,16,70,53,31,3,0],"SI|4|RR":[1236,0,245,42,379,386,141,23,20],"SI|4|RL":[675,0,170,47,190,171,73,17,7],"SI|4|LR":[298,0,137,10,60,56,22,5,8],"SI|4|LL":[225,0,149,9,26,27,10,4,0],"SI|5|RR":[1263,0,356,64,317,320,154,33,19],"SI|5|RL":[597,0,135,32,182,150,56,21,21],"SI|5|LR":[468,0,102,25,139,120,56,16,10],"SI|5|LL":[366,0,113,26,95,79,35,11,7],"SI|6|RR":[800,0,485,39,112,104,40,12,8],"SI|6|RL":[410,0,206,15,64,81,31,10,3],"SI|6|LR":[372,0,97,23,118,86,31,10,7],"SI|6|LL":[360,0,70,18,122,103,36,6,5],"SI|7|RR":[919,0,276,77,253,192,84,29,8],"SI|7|RL":[469,0,139,17,134,134,38,7,0],"SI|7|LR":[244,0,155,8,37,26,10,7,1],"SI|7|LL":[246,0,190,10,10,25,7,4,0],"SI|8|RR":[1070,0,477,57,215,200,89,24,8],"SI|8|RL":[513,0,200,24,117,112,49,5,6],"SI|8|LR":[352,0,143,12,70,82,34,7,4],"SI|8|LL":[321,0,157,21,51,64,23,2,3],"SI|9|RR":[795,0,554,30,81,85,32,12,1],"SI|9|RL":[351,0,216,5,55,43,23,4,5],"SI|9|LR":[250,0,107,9,55,61,17,0,1],"SI|9|LL":[272,0,94,27,69,66,11,4,1],"SI|11|RR":[1880,1130,0,107,344,226,62,8,3],"SI|11|RL":[1087,869,0,71,95,27,18,3,4],"SI|11|LR":[257,211,0,15,17,13,1,0,0],"SI|11|LL":[185,173,0,2,7,2,0,1,0],"SI|12|RR":[560,512,0,16,19,11,2,0,0],"SI|12|RL":[412,363,0,14,19,15,0,0,1],"SI|12|LR":[686,519,0,58,67,36,4,1,1],"SI|12|LL":[560,315,0,50,114,66,13,0,2],"SI|13|RR":[1715,1006,0,204,299,140,47,14,5],"SI|13|RL":[939,660,0,72,102,74,31,0,0],"SI|13|LR":[536,483,0,13,20,14,4,2,0],"SI|13|LL":[504,469,0,14,11,8,2,0,0],"SI|14|RR":[1832,1733,0,28,34,33,3,0,1],"SI|14|RL":[793,716,0,16,27,27,5,2,0],"SI|14|LR":[530,398,0,31,41,37,19,4,0],"SI|14|LL":[394,205,0,70,67,32,11,8,1],"FC|1|RR":[171,0,58,34,53,13,6,3,4],"FC|1|RL":[332,0,185,64,55,17,9,2,0],"FC|1|LR":[148,0,31,15,61,26,13,2,0],"FC|1|LL":[38,0,21,4,7,4,2,0,0],"FC|2|RR":[313,0,94,58,84,53,10,5,9],"FC|2|RL":[435,0,118,88,135,69,17,3,5],"FC|2|LR":[144,0,41,27,45,19,8,3,1],"FC|2|LL":[51,0,22,7,12,7,1,1,1],"FC|3|RR":[274,0,86,50,80,47,6,3,2],"FC|3|RL":[374,0,76,42,137,91,20,6,2],"FC|3|LR":[101,0,59,18,18,2,3,1,0],"FC|3|LL":[26,0,8,4,8,4,0,1,1],"FC|4|RR":[159,0,65,12,48,18,10,6,0],"FC|4|RL":[277,0,149,20,58,40,7,2,1],"FC|4|LR":[187,0,29,14,65,47,15,10,7],"FC|4|LL":[97,0,25,16,23,23,8,2,0],"FC|5|RR":[423,0,80,38,141,101,33,11,19],"FC|5|RL":[458,0,99,37,139,114,37,15,17],"FC|5|LR":[195,0,44,17,61,45,17,7,4],"FC|5|LL":[72,0,13,7,23,22,3,2,2],"FC|6|RR":[533,0,149,63,152,122,34,10,3],"FC|6|RL":[551,0,79,34,230,141,43,13,11],"FC|6|LR":[134,0,51,8,44,23,8,0,0],"FC|6|LL":[27,0,7,4,7,8,1,0,0],"FC|7|RR":[71,0,38,5,13,8,3,3,1],"FC|7|RL":[192,0,124,9,23,25,9,1,1],"FC|7|LR":[167,0,39,23,61,30,7,4,3],"FC|7|LL":[87,0,30,14,12,24,6,0,1],"FC|8|RR":[262,0,91,20,57,70,15,8,1],"FC|8|RL":[284,0,94,23,66,70,23,4,4],"FC|8|LR":[137,0,34,12,43,27,12,4,5],"FC|8|LL":[51,0,17,5,10,13,3,2,1],"FC|9|RR":[440,0,158,58,104,87,29,4,0],"FC|9|RL":[293,0,79,40,99,48,18,6,3],"FC|9|LR":[89,0,49,6,9,16,8,1,0],"FC|9|LL":[10,0,4,1,4,0,1,0,0],"FC|11|RR":[302,223,0,33,33,8,2,1,2],"FC|11|RL":[933,833,0,50,37,8,4,1,0],"FC|11|LR":[297,177,0,24,68,18,5,3,2],"FC|11|LL":[84,68,0,6,3,4,3,0,0],"FC|12|RR":[560,411,0,57,53,31,6,1,1],"FC|12|RL":[783,485,0,73,157,55,8,4,1],"FC|12|LR":[309,265,0,21,18,4,0,1,0],"FC|12|LL":[40,33,0,3,2,2,0,0,0],"FC|13|RR":[94,71,0,6,9,4,1,3,0],"FC|13|RL":[256,235,0,10,4,7,0,0,0],"FC|13|LR":[515,301,0,89,99,19,2,4,1],"FC|13|LL":[298,220,0,47,15,11,5,0,0],"FC|14|RR":[1522,1103,0,210,116,67,25,1,0],"FC|14|RL":[898,547,0,140,156,37,8,7,3],"FC|14|LR":[130,108,0,5,8,8,1,0,0],"FC|14|LL":[29,20,0,3,4,0,1,1,0],"SL|1|RR":[254,0,133,16,54,38,10,2,1],"SL|1|RL":[222,0,159,30,24,7,1,1,0],"SL|1|LR":[73,0,27,7,20,10,8,1,0],"SL|1|LL":[61,0,40,4,9,4,1,2,1],"SL|2|RR":[404,0,169,52,82,63,17,7,14],"SL|2|RL":[217,0,91,33,56,24,7,1,5],"SL|2|LR":[138,0,55,25,32,14,8,3,1],"SL|2|LL":[103,0,47,11,20,20,0,2,3],"SL|3|RR":[310,0,157,27,55,50,11,7,3],"SL|3|RL":[131,0,52,11,34,29,3,0,2],"SL|3|LR":[118,0,76,20,15,4,1,2,0],"SL|3|LL":[72,0,27,11,26,7,1,0,0],"SL|4|RR":[400,0,155,19,97,91,20,12,6],"SL|4|RL":[355,0,170,28,69,57,17,5,9],"SL|4|LR":[193,0,29,13,83,48,10,5,5],"SL|4|LL":[200,0,51,28,48,44,21,5,3],"SL|5|RR":[808,0,210,65,223,195,48,42,25],"SL|5|RL":[481,0,104,48,139,128,28,19,15],"SL|5|LR":[274,0,59,16,75,85,29,7,3],"SL|5|LL":[203,0,37,25,65,53,15,6,2],"SL|6|RR":[806,0,206,119,196,179,68,22,16],"SL|6|RL":[326,0,56,23,140,63,23,10,11],"SL|6|LR":[205,0,99,21,38,33,8,4,2],"SL|6|LL":[111,0,44,11,23,15,10,6,2],"SL|7|RR":[282,0,108,31,72,51,8,7,5],"SL|7|RL":[399,0,191,30,67,84,17,6,4],"SL|7|LR":[299,0,80,64,97,42,8,4,4],"SL|7|LL":[280,0,84,70,57,49,17,2,1],"SL|8|RR":[816,0,210,120,202,198,57,18,11],"SL|8|RL":[657,0,135,95,173,180,40,19,15],"SL|8|LR":[342,0,80,59,81,88,19,7,8],"SL|8|LL":[204,0,51,42,49,44,14,1,3],"SL|9|RR":[1138,0,308,246,224,256,73,29,2],"SL|9|RL":[555,0,104,128,185,83,25,16,14],"SL|9|LR":[191,0,79,30,28,40,13,1,0],"SL|9|LL":[79,0,34,12,19,7,5,2,0],"SL|11|RR":[455,354,0,31,45,20,5,0,0],"SL|11|RL":[592,534,0,21,25,8,1,2,1],"SL|11|LR":[119,82,0,11,19,4,0,2,1],"SL|11|LL":[141,107,0,12,11,7,3,1,0],"SL|12|RR":[565,393,0,54,54,45,18,1,0],"SL|12|RL":[180,107,0,20,39,9,4,1,0],"SL|12|LR":[290,270,0,7,6,6,1,0,0],"SL|12|LL":[145,123,0,9,8,3,1,0,1],"SL|13|RR":[446,290,0,71,60,13,7,3,2],"SL|13|RL":[899,642,0,126,58,49,19,5,0],"SL|13|LR":[1262,729,0,354,141,20,9,4,5],"SL|13|LL":[1269,865,0,274,70,47,12,1,0],"SL|14|RR":[5187,3478,0,1144,265,212,82,5,1],"SL|14|RL":[2264,1360,0,562,256,61,17,6,2],"SL|14|LR":[424,301,0,51,38,28,5,0,1],"SL|14|LL":[146,85,0,30,18,8,4,1,0],"ST|1|RR":[187,0,103,30,36,12,4,1,1],"ST|1|RL":[118,0,85,9,17,6,1,0,0],"ST|1|LR":[25,0,12,1,12,0,0,0,0],"ST|1|LL":[51,0,28,8,7,6,2,0,0],"ST|2|RR":[221,0,80,21,64,39,10,2,5],"ST|2|RL":[82,0,35,7,20,13,4,1,2],"ST|2|LR":[58,0,22,7,9,13,2,2,3],"ST|2|LL":[63,0,30,7,12,5,3,2,4],"ST|3|RR":[192,0,85,21,45,29,8,2,2],"ST|3|RL":[55,0,23,4,18,5,3,1,1],"ST|3|LR":[63,0,47,4,7,2,2,0,1],"ST|3|LL":[47,0,26,9,6,5,0,1,0],"ST|4|RR":[263,0,116,10,64,54,8,4,7],"ST|4|RL":[221,0,144,13,32,23,4,2,3],"ST|4|LR":[111,0,33,6,42,20,8,1,1],"ST|4|LL":[135,0,31,22,38,30,9,3,2],"ST|5|RR":[475,0,124,42,151,107,26,11,14],"ST|5|RL":[278,0,86,24,82,62,13,4,7],"ST|5|LR":[125,0,43,10,38,20,6,4,4],"ST|5|LL":[124,0,31,14,35,32,6,0,6],"ST|6|RR":[536,0,125,73,126,144,41,17,10],"ST|6|RL":[155,0,34,12,63,31,8,5,2],"ST|6|LR":[105,0,54,8,14,21,6,0,2],"ST|6|LL":[62,0,29,3,22,6,1,0,1],"ST|7|RR":[168,0,76,12,42,26,7,2,3],"ST|7|RL":[198,0,113,6,33,29,13,3,1],"ST|7|LR":[143,0,34,21,56,17,6,4,5],"ST|7|LL":[151,0,42,26,35,37,8,3,0],"ST|8|RR":[413,0,125,38,111,96,19,16,8],"ST|8|RL":[300,0,114,34,85,40,16,9,2],"ST|8|LR":[151,0,48,17,39,33,9,2,3],"ST|8|LL":[114,0,42,12,28,15,6,9,2],"ST|9|RR":[589,0,167,112,118,146,35,11,0],"ST|9|RL":[260,0,65,41,104,28,9,6,7],"ST|9|LR":[91,0,46,5,16,15,5,3,1],"ST|9|LL":[46,0,23,3,11,5,0,3,1],"ST|11|RR":[338,298,0,11,21,8,0,0,0],"ST|11|RL":[392,366,0,5,11,8,1,1,0],"ST|11|LR":[52,32,0,7,8,4,0,1,0],"ST|11|LL":[110,72,0,13,14,9,2,0,0],"ST|12|RR":[433,271,0,44,41,49,21,6,1],"ST|12|RL":[47,24,0,4,16,1,1,1,0],"ST|12|LR":[204,197,0,2,3,2,0,0,0],"ST|12|LL":[97,77,0,6,11,2,0,0,1],"ST|13|RR":[218,157,0,16,28,12,4,1,0],"ST|13|RL":[395,344,0,18,15,12,4,1,1],"ST|13|LR":[527,309,0,126,73,13,1,4,1],"ST|13|LL":[753,512,0,160,36,32,12,1,0],"ST|14|RR":[3348,2262,0,630,201,180,70,4,1],"ST|14|RL":[847,492,0,210,106,28,6,4,1],"ST|14|LR":[182,150,0,12,7,5,4,3,1],"ST|14|LL":[88,63,0,7,8,9,1,0,0],"CU|1|RR":[77,0,52,1,14,7,2,0,1],"CU|1|RL":[160,0,124,8,11,14,2,1,0],"CU|1|LR":[48,0,25,0,8,11,4,0,0],"CU|1|LL":[15,0,11,0,1,2,1,0,0],"CU|2|RR":[96,0,57,6,16,12,4,0,1],"CU|2|RL":[140,0,92,2,21,20,4,0,1],"CU|2|LR":[78,0,54,4,6,10,3,1,0],"CU|2|LL":[23,0,14,3,1,4,0,0,1],"CU|3|RR":[47,0,31,1,9,4,1,1,0],"CU|3|RL":[46,0,30,3,5,6,1,0,1],"CU|3|LR":[99,0,77,2,9,7,4,0,0],"CU|3|LL":[28,0,13,2,7,3,3,0,0],"CU|4|RR":[137,0,69,8,36,13,6,4,1],"CU|4|RL":[342,0,198,11,50,63,15,3,2],"CU|4|LR":[76,0,32,5,23,11,4,0,1],"CU|4|LL":[40,0,13,2,11,9,3,1,1],"CU|5|RR":[195,0,72,9,39,54,11,6,4],"CU|5|RL":[331,0,131,10,77,75,23,10,5],"CU|5|LR":[184,0,76,7,34,51,9,3,4],"CU|5|LL":[36,0,13,3,8,8,2,0,2],"CU|6|RR":[146,0,53,13,26,34,12,4,4],"CU|6|RL":[173,0,70,6,47,34,8,5,3],"CU|6|LR":[171,0,108,1,16,33,7,3,3],"CU|6|LL":[46,0,18,3,17,6,1,1,0],"CU|7|RR":[102,0,36,15,27,18,2,1,3],"CU|7|RL":[335,0,143,30,58,78,19,6,1],"CU|7|LR":[189,0,59,28,72,22,2,3,3],"CU|7|LL":[63,0,20,18,7,12,5,1,0],"CU|8|RR":[236,0,53,27,62,65,11,10,8],"CU|8|RL":[459,0,148,54,115,89,27,17,9],"CU|8|LR":[245,0,79,23,66,46,13,12,6],"CU|8|LL":[63,0,13,9,12,20,4,3,2],"CU|9|RR":[248,0,66,45,50,63,18,4,2],"CU|9|RL":[285,0,96,51,94,24,9,7,4],"CU|9|LR":[162,0,63,16,28,38,17,0,0],"CU|9|LL":[25,0,8,4,8,2,2,0,1],"CU|11|RR":[169,155,0,1,7,3,2,1,0],"CU|11|RL":[572,538,0,6,12,14,2,0,0],"CU|11|LR":[50,44,0,1,4,1,0,0,0],"CU|11|LL":[29,25,0,2,0,1,1,0,0],"CU|12|RR":[73,55,0,6,2,7,3,0,0],"CU|12|RL":[56,45,0,0,6,2,2,1,0],"CU|12|LR":[296,287,0,4,0,5,0,0,0],"CU|12|LL":[43,41,0,0,0,2,0,0,0],"CU|13|RR":[224,134,0,35,38,13,1,3,0],"CU|13|RL":[893,612,0,115,76,68,19,3,0],"CU|13|LR":[900,548,0,233,87,25,3,2,2],"CU|13|LL":[321,224,0,61,22,7,6,1,0],"CU|14|RR":[1221,847,0,219,70,53,28,4,0],"CU|14|RL":[1520,976,0,323,161,35,13,8,4],"CU|14|LR":[387,263,0,51,29,34,8,2,0],"CU|14|LL":[44,19,0,6,12,6,0,0,1],"KC|1|RR":[19,0,10,2,4,3,0,0,0],"KC|1|RL":[44,0,33,0,5,5,1,0,0],"KC|1|LR":[1,0,1,0,0,0,0,0,0],"KC|1|LL":[2,0,1,0,0,1,0,0,0],"KC|2|RR":[22,0,12,0,4,3,2,1,0],"KC|2|RL":[27,0,19,1,2,1,1,2,1],"KC|2|LR":[14,0,11,0,3,0,0,0,0],"KC|2|LL":[2,0,1,0,1,0,0,0,0],"KC|3|RR":[9,0,5,0,1,2,1,0,0],"KC|3|RL":[17,0,13,0,2,2,0,0,0],"KC|3|LR":[19,0,18,0,0,0,1,0,0],"KC|3|LL":[4,0,3,0,1,0,0,0,0],"KC|4|RR":[41,0,19,3,11,5,2,1,0],"KC|4|RL":[75,0,43,5,7,8,6,4,2],"KC|4|LR":[15,0,5,2,4,2,0,1,1],"KC|4|LL":[4,0,1,1,0,1,1,0,0],"KC|5|RR":[53,0,12,3,15,13,5,3,2],"KC|5|RL":[90,0,36,5,13,22,9,2,3],"KC|5|LR":[36,0,12,3,8,10,0,2,1],"KC|5|LL":[7,0,4,0,1,0,1,1,0],"KC|6|RR":[40,0,16,1,9,11,1,2,0],"KC|6|RL":[34,0,16,3,6,6,0,0,3],"KC|6|LR":[28,0,14,1,5,5,1,1,1],"KC|6|LL":[6,0,1,1,2,2,0,0,0],"KC|7|RR":[25,0,10,3,7,1,2,1,1],"KC|7|RL":[83,0,29,10,23,12,7,2,0],"KC|7|LR":[39,0,15,5,12,4,0,1,2],"KC|7|LL":[18,0,6,2,1,9,0,0,0],"KC|8|RR":[83,0,21,16,29,13,4,0,0],"KC|8|RL":[141,0,43,18,46,18,5,6,5],"KC|8|LR":[50,0,13,8,15,13,1,0,0],"KC|8|LL":[7,0,2,1,2,2,0,0,0],"KC|9|RR":[87,0,34,20,12,15,4,1,1],"KC|9|RL":[82,0,25,16,30,8,0,2,1],"KC|9|LR":[31,0,11,3,7,7,3,0,0],"KC|9|LL":[4,0,1,1,0,1,1,0,0],"KC|11|RR":[49,45,0,0,2,1,1,0,0],"KC|11|RL":[145,141,0,1,1,1,1,0,0],"KC|11|LR":[9,8,0,0,1,0,0,0,0],"KC|11|LL":[0,0,0,0,0,0,0,0,0],"KC|12|RR":[26,22,0,1,2,1,0,0,0],"KC|12|RL":[7,5,0,0,2,0,0,0,0],"KC|12|LR":[37,35,0,0,1,1,0,0,0],"KC|12|LL":[8,7,0,0,1,0,0,0,0],"KC|13|RR":[66,30,0,20,8,6,1,1,0],"KC|13|RL":[292,175,0,58,25,26,5,2,1],"KC|13|LR":[200,125,0,41,27,6,0,1,0],"KC|13|LL":[56,41,0,12,2,0,1,0,0],"KC|14|RR":[471,303,0,109,23,26,6,2,2],"KC|14|RL":[531,327,0,131,46,17,7,3,0],"KC|14|LR":[94,58,0,17,11,5,3,0,0],"KC|14|LL":[16,12,0,2,2,0,0,0,0],"CH|1|RR":[70,0,18,4,27,18,3,0,0],"CH|1|RL":[221,0,106,17,37,41,15,1,4],"CH|1|LR":[31,0,17,1,6,4,1,1,1],"CH|1|LL":[4,0,3,0,1,0,0,0,0],"CH|2|RR":[60,0,26,6,17,7,2,1,1],"CH|2|RL":[117,0,56,8,20,25,4,2,2],"CH|2|LR":[92,0,42,5,22,16,3,2,2],"CH|2|LL":[8,0,2,0,4,2,0,0,0],"CH|3|RR":[30,0,9,2,6,9,2,2,0],"CH|3|RL":[37,0,24,1,10,2,0,0,0],"CH|3|LR":[200,0,79,14,40,49,9,3,6],"CH|3|LL":[11,0,3,0,4,4,0,0,0],"CH|4|RR":[184,0,24,25,68,44,8,8,7],"CH|4|RL":[655,0,122,83,165,209,54,14,8],"CH|4|LR":[84,0,42,8,17,12,0,4,1],"CH|4|LL":[19,0,9,1,7,2,0,0,0],"CH|5|RR":[170,0,28,36,53,28,15,5,5],"CH|5|RL":[457,0,88,54,129,125,27,17,17],"CH|5|LR":[296,0,53,36,83,84,17,16,7],"CH|5|LL":[28,0,2,4,12,5,2,2,1],"CH|6|RR":[88,0,26,15,19,20,3,4,1],"CH|6|RL":[158,0,67,8,51,20,6,5,1],"CH|6|LR":[450,0,76,87,99,134,37,9,8],"CH|6|LL":[33,0,5,5,17,3,2,1,0],"CH|7|RR":[242,0,41,57,92,30,10,6,6],"CH|7|RL":[888,0,150,186,196,278,61,12,5],"CH|7|LR":[246,0,106,39,61,26,3,8,3],"CH|7|LL":[27,0,10,7,6,4,0,0,0],"CH|8|RR":[296,0,39,64,92,70,17,10,4],"CH|8|RL":[772,0,158,138,201,171,62,25,17],"CH|8|LR":[541,0,114,115,140,123,30,7,12],"CH|8|LL":[39,0,5,11,14,6,2,1,0],"CH|9|RR":[158,0,47,34,42,19,14,1,1],"CH|9|RL":[337,0,145,48,87,35,13,7,2],"CH|9|LR":[599,0,83,149,122,167,61,12,5],"CH|9|LL":[36,0,5,11,9,7,2,2,0],"CH|11|RR":[197,124,0,11,45,13,4,0,0],"CH|11|RL":[1089,873,0,37,86,66,25,2,0],"CH|11|LR":[29,24,0,0,3,2,0,0,0],"CH|11|LL":[9,9,0,0,0,0,0,0,0],"CH|12|RR":[25,18,0,3,1,2,1,0,0],"CH|12|RL":[34,33,0,0,1,0,0,0,0],"CH|12|LR":[803,606,0,45,67,63,15,6,1],"CH|12|LL":[38,20,0,3,11,4,0,0,0],"CH|13|RR":[637,311,0,155,119,32,11,6,3],"CH|13|RL":[3240,1803,0,625,343,356,101,10,2],"CH|13|LR":[1091,827,0,145,69,31,10,6,3],"CH|13|LL":[153,118,0,23,9,2,1,0,0],"CH|14|RR":[937,701,0,159,38,27,10,2,0],"CH|14|RL":[1631,1274,0,190,91,47,20,8,1],"CH|14|LR":[2393,1304,0,498,269,226,87,7,2],"CH|14|LL":[140,71,0,40,20,7,1,1,0],"FS|1|RR":[36,0,15,2,8,9,1,0,1],"FS|1|RL":[72,0,27,9,16,14,5,0,1],"FS|1|LR":[0,0,0,0,0,0,0,0,0],"FS|1|LL":[1,0,0,0,1,0,0,0,0],"FS|2|RR":[30,0,11,4,6,6,2,0,1],"FS|2|RL":[50,0,18,5,13,14,0,0,0],"FS|2|LR":[5,0,2,0,0,2,1,0,0],"FS|2|LL":[1,0,0,1,0,0,0,0,0],"FS|3|RR":[17,0,6,2,4,4,1,0,0],"FS|3|RL":[20,0,8,1,5,4,2,0,0],"FS|3|LR":[14,0,6,0,4,3,1,0,0],"FS|3|LL":[1,0,1,0,0,0,0,0,0],"FS|4|RR":[93,0,18,9,38,22,4,1,1],"FS|4|RL":[255,0,51,31,62,83,20,6,2],"FS|4|LR":[5,0,5,0,0,0,0,0,0],"FS|4|LL":[1,0,0,0,1,0,0,0,0],"FS|5|RR":[92,0,12,10,38,22,7,1,2],"FS|5|RL":[138,0,28,12,46,39,9,2,2],"FS|5|LR":[19,0,2,3,6,4,1,0,3],"FS|5|LL":[1,0,0,0,0,0,0,1,0],"FS|6|RR":[41,0,14,7,7,8,3,2,0],"FS|6|RL":[40,0,14,3,12,6,2,1,2],"FS|6|LR":[34,0,8,2,11,11,2,0,0],"FS|6|LL":[3,0,0,1,1,1,0,0,0],"FS|7|RR":[98,0,21,16,33,20,3,4,1],"FS|7|RL":[369,0,66,74,87,103,33,5,1],"FS|7|LR":[17,0,4,6,5,1,1,0,0],"FS|7|LL":[0,0,0,0,0,0,0,0,0],"FS|8|RR":[168,0,20,35,58,41,8,4,2],"FS|8|RL":[272,0,44,59,87,56,13,7,6],"FS|8|LR":[42,0,2,17,13,6,1,1,2],"FS|8|LL":[1,0,0,0,0,0,0,1,0],"FS|9|RR":[98,0,23,24,26,14,10,1,0],"FS|9|RL":[135,0,49,25,42,12,4,0,3],"FS|9|LR":[38,0,5,13,5,12,3,0,0],"FS|9|LL":[1,0,0,1,0,0,0,0,0],"FS|11|RR":[122,79,0,7,17,13,3,2,1],"FS|11|RL":[382,320,0,8,30,17,7,0,0],"FS|11|LR":[5,4,0,0,1,0,0,0,0],"FS|11|LL":[1,0,0,0,1,0,0,0,0],"FS|12|RR":[17,14,0,1,2,0,0,0,0],"FS|12|RL":[21,18,0,0,2,1,0,0,0],"FS|12|LR":[59,49,0,3,3,2,2,0,0],"FS|12|LL":[1,1,0,0,0,0,0,0,0],"FS|13|RR":[375,198,0,84,68,12,10,1,2],"FS|13|RL":[1177,661,0,248,126,110,27,4,1],"FS|13|LR":[98,63,0,24,7,2,2,0,0],"FS|13|LL":[13,6,0,6,1,0,0,0,0],"FS|14|RR":[593,418,0,104,32,29,10,0,0],"FS|14|RL":[743,528,0,131,58,16,7,3,0],"FS|14|LR":[173,102,0,38,15,14,3,1,0],"FS|14|LL":[10,5,0,3,1,1,0,0,0],"SV|1|RR":[7,0,4,0,2,1,0,0,0],"SV|1|RL":[8,0,6,1,1,0,0,0,0],"SV|1|LR":[5,0,1,0,3,1,0,0,0],"SV|1|LL":[1,0,1,0,0,0,0,0,0],"SV|2|RR":[6,0,5,0,0,1,0,0,0],"SV|2|RL":[3,0,2,1,0,0,0,0,0],"SV|2|LR":[11,0,7,0,2,2,0,0,0],"SV|2|LL":[4,0,1,0,1,1,0,1,0],"SV|3|RR":[5,0,2,2,1,0,0,0,0],"SV|3|RL":[0,0,0,0,0,0,0,0,0],"SV|3|LR":[10,0,8,0,1,1,0,0,0],"SV|3|LL":[6,0,4,1,0,1,0,0,0],"SV|4|RR":[5,0,3,0,0,1,1,0,0],"SV|4|RL":[18,0,7,2,4,3,1,1,0],"SV|4|LR":[20,0,4,2,11,2,1,0,0],"SV|4|LL":[10,0,1,2,4,3,0,0,0],"SV|5|RR":[19,0,7,0,8,3,1,0,0],"SV|5|RL":[15,0,3,1,4,5,1,1,0],"SV|5|LR":[18,0,8,1,4,4,0,0,1],"SV|5|LL":[7,0,2,0,1,3,1,0,0],"SV|6|RR":[21,0,9,1,2,4,4,0,1],"SV|6|RL":[7,0,2,0,4,1,0,0,0],"SV|6|LR":[19,0,14,0,2,0,3,0,0],"SV|6|LL":[9,0,2,1,3,1,0,1,1],"SV|7|RR":[6,0,4,0,1,0,0,0,1],"SV|7|RL":[14,0,10,0,1,2,1,0,0],"SV|7|LR":[12,0,4,4,2,2,0,0,0],"SV|7|LL":[9,0,4,1,2,1,1,0,0],"SV|8|RR":[23,0,5,2,5,8,0,1,2],"SV|8|RL":[27,0,11,1,10,4,1,0,0],"SV|8|LR":[25,0,13,5,5,1,1,0,0],"SV|8|LL":[15,0,5,2,3,3,0,1,1],"SV|9|RR":[32,0,14,3,7,5,2,1,0],"SV|9|RL":[15,0,5,0,7,1,0,2,0],"SV|9|LR":[9,0,6,0,1,1,1,0,0],"SV|9|LL":[2,0,1,0,1,0,0,0,0],"SV|11|RR":[7,7,0,0,0,0,0,0,0],"SV|11|RL":[30,28,0,0,1,1,0,0,0],"SV|11|LR":[3,2,0,1,0,0,0,0,0],"SV|11|LL":[3,2,0,0,1,0,0,0,0],"SV|12|RR":[9,7,0,1,1,0,0,0,0],"SV|12|RL":[1,0,0,0,1,0,0,0,0],"SV|12|LR":[28,27,0,0,1,0,0,0,0],"SV|12|LL":[8,8,0,0,0,0,0,0,0],"SV|13|RR":[10,7,0,0,1,1,0,0,1],"SV|13|RL":[29,26,0,1,0,2,0,0,0],"SV|13|LR":[54,36,0,10,7,1,0,0,0],"SV|13|LL":[73,52,0,9,7,3,2,0,0],"SV|14|RR":[185,128,0,39,10,6,2,0,0],"SV|14|RL":[81,54,0,18,9,0,0,0,0],"SV|14|LR":[41,37,0,0,2,1,0,1,0],"SV|14|LL":[10,7,0,1,2,0,0,0,0]},"by_count":{"0-0|in":[25437,0,14056,2187,4623,3073,912,336,250],"0-0|out":[22269,18657,0,1864,1035,533,131,36,13],"0-1|in":[10859,0,2791,1468,3229,2268,691,247,165],"0-1|out":[13310,9517,0,1818,1120,620,188,39,8],"0-2|in":[4006,0,574,562,1428,977,312,98,55],"0-2|out":[8550,5676,0,1194,957,521,163,28,11],"1-0|in":[10016,0,4054,1086,2402,1661,491,184,138],"1-0|out":[8198,6376,0,904,535,270,83,22,8],"1-1|in":[9329,0,2112,1331,2868,2014,624,226,154],"1-1|out":[9426,6419,0,1424,940,444,142,41,16],"1-2|in":[6715,0,795,975,2463,1697,536,153,96],"1-2|out":[11576,7150,0,1852,1496,770,245,48,15],"2-0|in":[3630,0,1573,330,844,585,167,69,62],"2-0|out":[2540,2023,0,219,180,77,26,10,5],"2-1|in":[5485,0,1246,708,1738,1191,364,137,101],"2-1|out":[4169,2902,0,575,420,183,56,20,13],"2-2|in":[7382,0,849,919,2764,1946,609,170,125],"2-2|out":[8596,4875,0,1384,1373,680,211,55,18],"3-0|in":[1229,0,1079,22,61,38,12,6,11],"3-0|out":[702,683,0,3,7,6,1,2,0],"3-1|in":[2504,0,708,266,712,535,164,68,51],"3-1|out":[1579,1167,0,159,149,74,17,8,5],"3-2|in":[5583,0,618,708,1984,1526,459,159,129],"3-2|out":[4016,2188,0,643,685,370,93,24,13]}};</script>
+<!-- GAME:DATA:END -->
 <script>
 (function(){
   if(!CanvasRenderingContext2D.prototype.roundRect){
@@ -359,12 +790,14 @@ if('serviceWorker' in navigator){
     'knuckle':{breakAt:0.24, short:'불규칙하게 흔들림', cue:'회전이 거의 없어 진행 방향이 계속 바뀜'}
   };
 
+  // 존 폭이 화면의 46% (게임은 존 밖 칸까지 보이게 38%)
+  function ZOOM(){ return view==='game' ? 0.38 : 0.46; }
   // ───────── 원근 투영 (타자 시점) ─────────
   // 존 폭이 화면의 46%가 되도록 줌 설정 → 모든 크기가 같은 자로 그려짐
   function proj(X, Y, d){
     // X: 좌우 m (+=화면 오른쪽/1루쪽), Y: 높이 m, d: 플레이트로부터 거리 m
     const dist=d+CAM_BEHIND;
-    const S=(W*0.46/ZONE_W)*(CAM_BEHIND/dist)*(1+0/1);
+    const S=(W*ZOOM()/ZONE_W)*(CAM_BEHIND/dist);
     const HOR=H*0.34;   // 눈높이(지평선) 화면 위치
     return {
       x: W/2 + X*S,
@@ -429,12 +862,21 @@ if('serviceWorker' in navigator){
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
       t.classList.add('on');
       view=t.dataset.v;
-      const show = (view==='front'||view==='side') ? 'flex':'none';
+      const game = view==='game';
+      const show = (view==='front'||view==='side'||game) ? 'flex':'none';
       $('hand-wrap').style.display=show;
       $('bat-btn').style.display = view==='front' ? 'block':'none';
       $('matchup').style.display = view==='front' ? 'block':'none';
       $('cmp-bar').style.display = view==='side' ? 'flex':'none';
-      $('controls').style.display = view==='grip' ? 'none':'flex';
+      $('controls').style.display = (view==='grip'||game) ? 'none':'flex';
+      $('pitch-bar').style.display = game ? 'none':'flex';
+      $('game-bar').style.display = game ? 'flex':'none';
+      $('game-hud').style.display = game ? 'block':'none';
+      document.querySelector('.d-card.course').style.display = game ? 'none':'block';
+      $('page').classList.toggle('game', game);
+      resize();
+      if(game){ enterGame(); return; }
+      leaveGame();
       doThrow(mode);
     });
   });
@@ -509,8 +951,10 @@ if('serviceWorker' in navigator){
     const d=RELEASE_D*(1-tN);
     const ax=2*(p.bx*sgn)/(T*T);
     const ay=2*(p.mv||0)/(T*T) - G;
-    const v0x=(p.tx*sgn - relX)/T - 0.5*ax*T;
-    const v0y=(p.ty - REL_H)/T - 0.5*ay*T;
+    const tgtX = p.ax!==undefined ? p.ax : p.tx;
+    const tgtY = p.ay!==undefined ? p.ay : p.ty;
+    const v0x=(tgtX*sgn - relX)/T - 0.5*ax*T;
+    const v0y=(tgtY - REL_H)/T - 0.5*ay*T;
 
     // 회전이 없다면 향했을 기준선. 여기에서 구종별 무브먼트가 갈라진다.
     const X0=relX + v0x*t;
@@ -773,8 +1217,8 @@ if('serviceWorker' in navigator){
     drawMitt();
 
     // ── 타자 실루엣 (좌/우타석 위치 표시) ──
-    // 우타자는 3루쪽(화면 왼쪽, X음수), 좌타자는 1루쪽(화면 오른쪽, X양수)
-    drawBatter();
+    // 우타자는 3루쪽(화면 왼쪽, X음수), 좌타자는 1루쪽(화면 오른쪽, X양수). 게임은 타자 몸을 안 그림 (기획)
+    if(view!=='game') drawBatter();
 
     // 공
     const rel=releaseT(t);
@@ -907,6 +1351,7 @@ if('serviceWorker' in navigator){
 
   function drawMitt(){
     const sgn=lefty?-1:1;
+    if(view==='game' && !gameAim) return;      // 게임: 칸을 고르기 전엔 미트 없음
     const m=proj(cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
     const r=0.125*m.s;
     ctx.save();
@@ -962,7 +1407,7 @@ if('serviceWorker' in navigator){
     ctx.moveTo(p.x,p.y+r*0.8); ctx.lineTo(p.x,p.y+r*1.7);
     ctx.stroke();
     ctx.restore();
-    drawABSBadge(col, absCross.strike);
+    if(view!=='game') drawABSBadge(col, absCross.strike);
   }
   function drawABSBadge(col, strike){
     const label=strike ? 'STRIKE' : 'BALL';
@@ -1730,9 +2175,249 @@ if('serviceWorker' in navigator){
     const t=performance.now();
     if(view==='front') drawFront(t);
     else if(view==='side') drawSide(t);
+    else if(view==='game'){ drawFront(t); gameFrame(); }
     else drawGrip();
     requestAnimationFrame(loop);
   }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 한 이닝 게임 (4번째 탭)
+  //   플레이어 = 투수. 구종 칩을 고르고 화면의 존을 누르면 그 칸을 노려 던진다.
+  //   결과는 PitchEngine(tools/engine.js, 인라인)이 실측 확률표로 정한다.
+  //   9회말 3:2 리드, 1사 1·2루. 무실점 3아웃이면 승리.
+  // ═════════════════════════════════════════════════════════════════════
+  const E = window.PitchEngine;
+  const TABLE = (E && window.PITCH_TABLE) ? E.buildTable(window.PITCH_TABLE) : null;
+
+  // 도감에 없는 두 구종 — 궤적값은 설계값 (기획서 7절)
+  const KC_PITCH={key:'kcurve', name:'너클커브', color:'#b48cff', v:128, bx:-0.22, mv:-0.48, shape:'early',
+     tx:-0.05, ty:0.5, spin:'top', spinSpd:0.6, seamRot:0.25,
+     fingers:[[0.0,-0.43],[0.22,-0.38]], thumb:[0,0.58],
+     gripType:'curve', gripTxt:'검지를 구부려 손톱을 실밥에 세워 박고, 중지로 실밥을 겁니다. 나머지는 커브와 같게 — 손목을 엎어 탑스핀을 줍니다.',
+     spinTxt:'분당 2600회 탑스핀 — 검지를 세워 찍은 만큼 회전이 더 걸립니다.',
+     desc:'커브를 손가락 관절로 찍어 던지는 변형. 커브보다 빠르고, 더 늦게, 더 날카롭게 떨어집니다.',
+     use:'커브의 낙차에 속도를 더한 결정구. 직구 타이밍에 나온 배트 밑으로 떨어집니다.',
+     course:{RR:'',RL:'',LR:'',LL:''}};
+  const SV_PITCH={key:'slurve', name:'슬러브', color:'#c6ff5a', v:130, bx:-0.40, mv:-0.28, shape:'gradual',
+     tx:-0.2, ty:0.5, spin:'side', spinSpd:0.6, seamRot:Math.PI/2+0.4,
+     fingers:[[0.06,-0.42],[0.30,-0.34]], thumb:[-0.16,0.57],
+     gripType:'slider', gripTxt:'슬라이더 그립에서 중지를 실밥에 더 깊게 걸고 손목을 조금 더 엎습니다. 슬라이더보다 위에서 아래로 채는 느낌.',
+     spinTxt:'분당 2500회 — 옆회전과 탑스핀이 섞인, 기울어진 회전축.',
+     desc:'슬라이더와 커브의 중간. 슬라이더처럼 옆으로 가면서 커브처럼 떨어지는 대각선 궤적.',
+     use:'옆·아래 두 방향으로 도망가서 배트 각도를 맞추기 어렵습니다. 같은 손 타자 바깥쪽 낮게.',
+     course:{RR:'',RL:'',LR:'',LL:''}};
+  const byKey=k=>PITCHES.find(p=>p.key===k);
+  // 게임 구종 10종 → 도감 궤적 (투심은 싱커에 합침, 너클볼 없음)
+  const GAME_PITCHES=[
+    ['FF',byKey('4seam')], ['SI',byKey('sinker')], ['FC',byKey('cutter')], ['SL',byKey('slider')], ['ST',byKey('sweeper')],
+    ['CU',byKey('curve')], ['KC',KC_PITCH], ['CH',byKey('change')], ['FS',byKey('splitter')], ['SV',SV_PITCH]
+  ];
+  const GAME_PITCH_MAP=Object.fromEntries(GAME_PITCHES);
+
+  // 타자 9명 — 이름·성향은 7단계에서. 지금은 번호와 좌우만
+  const LINEUP=[
+    {name:'1번 타자',hand:'R'},{name:'2번 타자',hand:'L'},{name:'3번 타자',hand:'R'},
+    {name:'4번 타자',hand:'L'},{name:'5번 타자',hand:'R'},{name:'6번 타자',hand:'R'},
+    {name:'7번 타자',hand:'L'},{name:'8번 타자',hand:'R'},{name:'9번 타자',hand:'L'}
+  ];
+
+  const RESULT_TXT={
+    ball:['볼',''], called:['스트라이크','루킹'], whiff:['스트라이크','헛스윙'], foul:['파울',''],
+    out:['아웃','인플레이'], single:['안타','단타'], double:['2루타','장타'], hr:['홈런','담장 밖'],
+    walk:['볼넷',''], strikeout:['삼진','']
+  };
+  const RESULT_COL={
+    ball:'#ff5a5a', called:'#52e07a', whiff:'#52e07a', foul:'#ffd23b',
+    out:'#52e07a', single:'#ff9a3d', double:'#ff5a5a', hr:'#ff5a5a', walk:'#ff5a5a', strikeout:'#52e07a'
+  };
+
+  let dexCur=cur;            // 도감에서 보고 있던 구종 (게임 나가면 복구)
+  let gamePitch='FF';        // 고른 구종 코드
+  let gameAim=null;          // 노린 점 {x,z} (미트 위치)
+  const game={ phase:'idle', inning:null, batterIdx:0, pa:null, rec:null, endTimer:0 };
+
+  // ── 게임 구종 칩 ──
+  const gbar=$('game-bar');
+  const gchips={};
+  GAME_PITCHES.forEach(([code,p])=>{
+    const c=document.createElement('div');
+    c.className='p-chip';
+    c.style.setProperty('--c', p.color);
+    c.textContent=p.name.split(' ')[0];
+    c.addEventListener('click', ()=>{
+      gamePitch=code;
+      Object.values(gchips).forEach(x=>x.classList.remove('on'));
+      c.classList.add('on');
+      if(game.phase!=='flying'){ cur=p; updateInfo(); }
+    });
+    gbar.appendChild(c); gchips[code]=c;
+  });
+  gchips.FF.classList.add('on');
+
+  // ABS 판정 (도감과 같은 규칙: 공 일부라도 존에 걸치면 스트라이크)
+  function absJudge(x,z){
+    const R=BALL_R_M;
+    return Math.abs(x)<=ZONE_W/2+R && z>=ZONE_BOT-R && z<=ZONE_TOP+R;
+  }
+
+  function curHands(){ return (lefty?'L':'R') + LINEUP[game.batterIdx%9].hand; }
+
+  function enterGame(){
+    if(view!=='game') return;
+    if(!GAME_PITCHES.some(([,p])=>p===cur) && cur.ax===undefined) dexCur=cur;
+    mode='real';
+    throwT=-1; path=[]; pathDone=false; absCross=null; trail=[];
+    if(!TABLE){ showMsg('확률표가 없습니다', 'tools/build.js 를 돌려주세요', '#ff5a5a'); return; }
+    if(!game.inning || game.phase==='over') newGame();
+    else { cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD(); if($('game-msg').innerHTML) $('game-msg').style.display='block'; }
+  }
+  function leaveGame(){
+    if(game.phase==='flying') game.phase='ready';   // 던지는 중에 나가면 그 공은 무효
+    gameAim=null;
+    cur=dexCur; updateInfo();
+    $('game-msg').style.display='none';
+    $('game-end').style.display='none';
+  }
+
+  function newGame(){
+    game.inning=E.startInning();
+    game.batterIdx=0;
+    game.pa=E.startPA(curHands());
+    game.rec=null;
+    game.phase='ready';
+    gameAim=null;
+    throwT=-1; path=[]; pathDone=false; absCross=null;
+    batLefty = LINEUP[0].hand==='L';
+    updateMatchup();
+    cur=GAME_PITCH_MAP[gamePitch]; updateInfo();
+    $('game-end').style.display='none';
+    showMsg('존을 누르면 던집니다', '구종은 위 칩에서', '#aab2c0');
+    updateHUD();
+  }
+
+  function showMsg(main, sub, col){
+    const m=$('game-msg');
+    m.innerHTML=main+(sub?'<small>'+sub+'</small>':'');
+    m.style.borderColor=col||'#3a4660';
+    m.style.color=col||'#fff';
+    m.style.display='block';
+  }
+
+  function updateHUD(){
+    const inn=game.inning, pa=game.pa;
+    if(!inn) return;
+    const b=document.querySelectorAll('#game-hud .gh-bases i');
+    b[0].classList.toggle('on', inn.bases[1]);   // b2
+    b[1].classList.toggle('on', inn.bases[0]);   // b1
+    b[2].classList.toggle('on', inn.bases[2]);   // b3
+    document.querySelector('#game-hud .gh-outs').textContent=inn.outs+'아웃';
+    let h='B ';
+    for(let i=0;i<3;i++) h+='<b class="b'+(i<pa.balls?' on':'')+'"></b>';
+    h+='&nbsp; S ';
+    for(let i=0;i<2;i++) h+='<b class="s'+(i<pa.strikes?' on':'')+'"></b>';
+    document.querySelector('#game-hud .gh-count').innerHTML=h;
+    const bt=LINEUP[game.batterIdx%9];
+    document.querySelector('#game-hud .gh-bat').textContent=bt.name+' · '+(bt.hand==='L'?'좌타':'우타')+' · '+pa.history.length+'구';
+  }
+
+  // 화면 탭 → 존 칸
+  function tapToZone(px,py){
+    const S=W*ZOOM()/ZONE_W;          // proj() 의 d=0 배율
+    const HOR=H*0.34;
+    const X=(px-W/2)/S, Y=EYE_H-(py-HOR)/S;
+    const g=E.ZONE_GEOM, m=0.32;      // 존 밖 여유
+    if(Math.abs(X)>g.halfW+m || Y<g.bot-m || Y>g.top+m) return null;
+    return E.pointToZone(X,Y);
+  }
+
+  cv.addEventListener('click', ev=>{
+    if(view!=='game' || game.phase!=='ready') return;
+    const r=cv.getBoundingClientRect();
+    const zone=tapToZone(ev.clientX-r.left, ev.clientY-r.top);
+    if(zone) throwGamePitch(zone);
+  });
+
+  function throwGamePitch(zone){
+    const base=GAME_PITCH_MAP[gamePitch];
+    game.pa.hands=curHands();
+    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge});
+    const sgn=lefty?-1:1;
+    const aim=E.zoneTarget(zone);
+    gameAim={x:aim.x, z:aim.z};
+    // 노림(tx/ty)은 미트 위치, 실제 도달(ax/ay)은 실투가 반영된 점. sgn 은 ballWorldFor 가 다시 곱하므로 미리 나눔
+    cur=Object.assign({}, base, {tx:aim.x*sgn, ty:aim.z, ax:rec.x*sgn, ay:rec.z});
+    game.rec=rec;
+    game.phase='flying';
+    $('game-msg').style.display='none';
+    doThrow('real');
+  }
+
+  // 매 프레임: 공이 도착했으면 결과 처리. 던지기 전엔 존 밖 4칸 안내선
+  function gameFrame(){
+    if(game.phase==='flying' && pathDone) onArrive();
+    if(game.phase==='ready' || game.phase==='flying') drawOuterZones();
+  }
+
+  function drawOuterZones(){
+    const g=E.ZONE_GEOM, m=0.17;
+    const L=-g.halfW-m, R=g.halfW+m, B=g.bot-m, T=g.top+m, mid=(g.top+g.bot)/2;
+    const P=(x,y)=>proj(x,y,0);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.13)'; ctx.lineWidth=1; ctx.setLineDash([3,5]);
+    const a=P(L,T), b=P(R,T), c=P(R,B), d=P(L,B);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.lineTo(d.x,d.y); ctx.closePath(); ctx.stroke();
+    // 사분면 경계 (존 가장자리 → 바깥)
+    const pairs=[[0,T,0,g.top],[0,B,0,g.bot],[L,mid,-g.halfW,mid],[R,mid,g.halfW,mid]];
+    ctx.beginPath();
+    for(const [x1,y1,x2,y2] of pairs){ const p1=P(x1,y1), p2=P(x2,y2); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function onArrive(){
+    const rec=game.rec, inn=game.inning;
+    if(!path.length) pushPath(ballWorld(1));   // 화면이 가려져 비행 프레임을 놓쳤어도 도착점은 그린다
+    absCross={X:rec.x, Y:rec.z, strike:absJudge(rec.x,rec.z)};
+    const [main,sub]=RESULT_TXT[rec.result];
+    let text=main, subText=sub, col=RESULT_COL[rec.result];
+    if(rec.outcome){
+      const runs=E.applyOutcome(inn, rec.outcome);
+      if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]; col=RESULT_COL[rec.outcome]; }
+      subText = runs ? runs+'실점' : (E.inningOver(inn) ? '' : inn.outs+'아웃 · 다음 타자');
+      if(E.inningOver(inn)){
+        game.phase='over';
+        showMsg(text, subText, col);
+        updateHUD();
+        clearTimeout(game.endTimer);
+        game.endTimer=setTimeout(showEnd, 1100);
+        return;
+      }
+      game.batterIdx++;
+      game.pa=E.startPA(curHands());
+      batLefty = LINEUP[game.batterIdx%9].hand==='L';
+      updateMatchup();
+    }
+    showMsg(text, subText, col);
+    game.phase='ready';
+    updateHUD();
+  }
+
+  function showEnd(){
+    const inn=game.inning, won=inn.runs===0;
+    const end=$('game-end');
+    end.querySelector('.ge-title').textContent = won ? 'WIN' : 'LOSE';
+    end.querySelector('.ge-title').style.color = won ? '#52e07a' : '#ff5a5a';
+    end.querySelector('.ge-sub').innerHTML = won
+      ? '무실점으로 이닝 종료 — 3 : 2 승리'
+      : '9회말 '+inn.runs+'실점 — 3 : '+(2+inn.runs)+' 패배';
+    end.style.display='flex';
+    $('game-msg').style.display='none';
+  }
+  $('game-again').addEventListener('click', ()=>newGame());
+  window.__pb={ get game(){return game;}, tapToZone, throwGamePitch, get W(){return W;}, get H(){return H;},
+    step(){ if(game.phase==='flying'){ pathDone=true; onArrive(); } } };  // 디버그용
+  $('hand-btn').addEventListener('click', ()=>{ if(view==='game' && game.inning) updateHUD(); });
 
   resize();
   updateInfo();
