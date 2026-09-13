@@ -2074,434 +2074,242 @@ return {
     ctx.restore();
   }
 
-  // ───────── 그립 (정밀화) ─────────
+  // ───────── 그립 도식 (v2) ─────────
+  // 진짜 야구공 실밥(회전 공에 쓰는 8자 곡선)을 구종별 방향으로 놓고, 반투명 손끝 밑으로 실밥이 비치게 그린다.
+  // 오른쪽엔 옆에서 본 그림: 엄지 위치와 손바닥-공 사이 틈(깊이).
+  const GRIP_SIDE={  // 옆 그림 파라미터: gap = 손바닥과 공 사이 틈(R 배수), bend = 손가락이 공을 감는 정도
+    fourseam:{gap:0.30, bend:0.55, txt:'손바닥과 틈을 둔다'},
+    twoseam: {gap:0.26, bend:0.6,  txt:'포심보다 살짝 깊게'},
+    cutter:  {gap:0.24, bend:0.6,  txt:'글러브쪽으로 치우쳐'},
+    slider:  {gap:0.20, bend:0.65, txt:'바깥 절반을 잡음'},
+    curve:   {gap:0.08, bend:0.8,  txt:'깊게 쥐고 중지로 걸침'},
+    circle:  {gap:0.10, bend:0.7,  txt:'깊게, 손바닥 가까이'},
+    split:   {gap:0.02, bend:0.35, txt:'손가락 사이에 끼움'},
+    knuckle: {gap:0.12, bend:0.9,  txt:'손톱을 세워 박음'},
+  };
+  // 실밥 기준 자세(오일러, 라디안) 두 가지: 포심계(말굽이 손끝 밑에 가로) / 투심계(좁은 실밥이 손가락 따라 세로)
+  // 구종의 seamRot 이 π/4 이상이면 포심계, 아니면 투심계. 남는 각도만큼 시선축으로 더 돌린다
+  // (손끝 위치에서 실밥이 가로/세로가 되도록 수치로 찾은 값)
+  const GRIP_BASE4=[5.655, 5.498, 3.77], GRIP_BASE2=[6.109, 0.349, 1.745];
+  function gripRot(seamRot){
+    const r=seamRot||0;
+    if(r>=Math.PI/4){ const b=GRIP_BASE4; return [b[0],b[1],b[2]+(r-Math.PI/2)]; }
+    const b=GRIP_BASE2; return [b[0],b[1],b[2]+r];
+  }
+  function rotXYZ(p,[ax,ay,az]){
+    let [x,y,z]=p;
+    let c=Math.cos(ax), s=Math.sin(ax); [y,z]=[y*c-z*s, y*s+z*c];
+    c=Math.cos(ay); s=Math.sin(ay);     [x,z]=[x*c+z*s, -x*s+z*c];
+    c=Math.cos(az); s=Math.sin(az);     [x,y]=[x*c-y*s, x*s+y*c];
+    return [x,y,z];
+  }
+  // 공 위 실밥을 화면에 그림. front=true 면 앞면(z>0)만, alpha 로 투명도
+  function drawSeamsOn(cx,cy,R,rot,alpha,frontOnly){
+    ctx.save();
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    const pts=SEAM_PTS.map(p=>rotXYZ(p,rot));
+    // 실밥 본체
+    for(let i=1;i<pts.length;i++){
+      const a=pts[i-1], b=pts[i];
+      const front=(a[2]+b[2])/2>0.02;
+      if(frontOnly && !front) continue;
+      const depth=Math.max(0,(a[2]+b[2])/2);
+      ctx.strokeStyle=front ? 'rgba(178,44,60,'+(alpha*(0.55+0.45*depth)).toFixed(2)+')' : 'rgba(178,44,60,'+(alpha*0.12).toFixed(2)+')';
+      ctx.lineWidth=front ? Math.max(2.5,R*0.05*(0.7+0.3*depth)) : 1.2;
+      ctx.beginPath(); ctx.moveTo(cx+a[0]*R,cy+a[1]*R); ctx.lineTo(cx+b[0]*R,cy+b[1]*R); ctx.stroke();
+    }
+    // 바늘땀 (앞면만, 실밥에 직각인 짧은 V)
+    ctx.strokeStyle='rgba(255,255,255,'+(alpha*0.85).toFixed(2)+')'; ctx.lineWidth=Math.max(1,R*0.018);
+    for(let i=3;i<pts.length-3;i+=4){
+      const a=pts[i-2], b=pts[i+2], p=pts[i];
+      if(p[2]<0.08) continue;
+      const dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
+      const px=cx+p[0]*R, py=cy+p[1]*R, s=R*0.055*p[2], t=R*0.03;
+      ctx.beginPath(); ctx.moveTo(px+nx*s-dx/L*t, py+ny*s-dy/L*t); ctx.lineTo(px, py); ctx.lineTo(px-nx*s-dx/L*t, py-ny*s-dy/L*t); ctx.stroke();
+    }
+    ctx.restore();
+  }
   function drawGrip(){
     const bg=ctx.createLinearGradient(0,0,0,H);
     bg.addColorStop(0,'#0b172b'); bg.addColorStop(1,'#050a12');
     ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-    const cx=W*0.43, cy=H*0.40, R=Math.min(W*0.34,H*0.27);
+    const cx=W*0.34, cy=H*0.41, R=Math.min(W*0.28,H*0.25);
     ctx.fillStyle='#fff'; ctx.font='800 15px -apple-system,sans-serif'; ctx.textAlign='left';
-    ctx.fillText('그립 도식 — 손 모양보다 접촉 위치를 본다',16,25);
+    ctx.fillText('그립 — 실밥 위 어디를 짚는가',16,25);
     ctx.fillStyle=cur.color; ctx.font='800 12px -apple-system,sans-serif'; ctx.textAlign='right';
     ctx.fillText(cur.name,W-16,25);
 
-    // 공 본체
-    ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=20; ctx.shadowOffsetY=7;
-    const ballG=ctx.createRadialGradient(cx-R*0.35,cy-R*0.38,R*0.08,cx,cy,R*1.05);
-    ballG.addColorStop(0,'#fff'); ballG.addColorStop(0.72,'#f1eee5'); ballG.addColorStop(1,'#c9c1b2');
-    ctx.fillStyle=ballG; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill(); ctx.restore();
-    // 손가락 접촉점과 겹쳐도 읽히도록 실밥을 단순하고 선명한 도식으로 표시한다.
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx,cy,R*0.98,0,Math.PI*2); ctx.clip();
-    ctx.translate(cx,cy); ctx.rotate(cur.seamRot||0);
-    ctx.strokeStyle='#c83f52'; ctx.lineWidth=Math.max(3,R*0.035); ctx.lineCap='round';
-    ctx.setLineDash([Math.max(4,R*0.055),Math.max(3,R*0.035)]);
-    for(const side of [-1,1]){
-      ctx.beginPath();
-      ctx.moveTo(side*R*0.48,-R*0.88);
-      ctx.bezierCurveTo(side*R*0.12,-R*0.52,side*R*0.12,R*0.52,side*R*0.48,R*0.88);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]); ctx.restore();
-
     const type=cur.gripType||'fourseam';
-    const labels = type==='circle' ? ['중지','약지','새끼'] : type==='knuckle' ? ['검지 손톱','중지 손톱','약지 손톱'] : ['검지','중지'];
-    const strong = (cur.key==='cutter'||cur.key==='sinker'||cur.key==='2seam') ? 0 :
-                   (type==='slider'||type==='curve') ? 1 : -1;
+    const rot=gripRot(cur.seamRot);
 
-    function contactFinger(fp,i){
+    // ── 손바닥·손목 (공 뒤에) ──
+    ctx.save();
+    const pg=ctx.createLinearGradient(cx-R,cy,cx+R*1.4,cy+R*1.8); pg.addColorStop(0,'rgba(222,184,156,0.95)'); pg.addColorStop(1,'rgba(190,146,118,0.95)');
+    ctx.fillStyle=pg; ctx.strokeStyle='rgba(140,92,70,0.6)'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx-R*0.95, cy+R*0.15);
+    ctx.quadraticCurveTo(cx-R*1.15, cy+R*1.1, cx-R*0.3, cy+R*1.35);   // 엄지 언덕
+    ctx.quadraticCurveTo(cx+R*0.6, cy+R*1.6, cx+R*1.25, cy+R*1.05);   // 손바닥 아래
+    ctx.lineTo(cx+R*1.3, cy+R*2.2); ctx.lineTo(cx+R*0.2, cy+R*2.2);    // 손목
+    ctx.quadraticCurveTo(cx+R*0.9, cy+R*0.2, cx+R*1.05, cy-R*0.4);    // 새끼손가락 쪽
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    // ── 공 본체 (가죽 질감 + 그림자) ──
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=24; ctx.shadowOffsetY=8;
+    const ballG=ctx.createRadialGradient(cx-R*0.35,cy-R*0.38,R*0.05,cx,cy,R*1.05);
+    ballG.addColorStop(0,'#ffffff'); ballG.addColorStop(0.55,'#f3efe6'); ballG.addColorStop(0.85,'#ddd5c6'); ballG.addColorStop(1,'#b9ae9c');
+    ctx.fillStyle=ballG; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // 가죽 결 (아주 옅은 점)
+    ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R*0.99,0,Math.PI*2); ctx.clip();
+    ctx.fillStyle='rgba(120,100,80,0.05)';
+    for(let i=0;i<90;i++){ const a=i*2.399, r=R*Math.sqrt((i%37)/37)*0.97; ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r, cy+Math.sin(a)*r, 1.2, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+    // 실밥
+    ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R*0.995,0,Math.PI*2); ctx.clip();
+    drawSeamsOn(cx,cy,R,rot,1,true);
+    ctx.restore();
+
+    // ── 손가락 (앞) ──
+    const SKIN='rgba(232,196,168,0.80)', SKIN_DK='rgba(150,100,78,0.85)', NAIL='rgba(250,236,226,0.95)';
+    const labels = type==='circle' ? ['중지','약지','새끼'] : type==='knuckle' ? ['검지','중지','약지'] : ['검지','중지'];
+    const strong = (cur.key==='cutter'||cur.key==='sinker'||cur.key==='2seam') ? 0 :
+                   (type==='slider'||type==='curve'||type==='kcurve') ? 1 : -1;
+    function finger(fp,i){
       const x=cx+fp[0]*R, y=cy+fp[1]*R;
-      const spread=(fp[0])*R*0.35;
-      const ex=x+spread, ey=cy-R*1.18;
+      const ex=x+fp[0]*R*0.45, ey=cy-R*1.22;                 // 손가락이 나오는 위쪽 (손등 방향)
+      const mx=(x+ex)/2+fp[0]*R*0.05, my=(y+ey)/2-R*0.05;
       ctx.save(); ctx.lineCap='round';
-      ctx.strokeStyle='rgba(118,166,230,0.30)'; ctx.lineWidth=R*0.22;
-      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo((ex+x)/2,y-R*0.18,x,y); ctx.stroke();
-      ctx.strokeStyle='rgba(225,238,255,0.86)'; ctx.lineWidth=R*0.15;
-      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo((ex+x)/2,y-R*0.18,x,y); ctx.stroke();
-      ctx.fillStyle=i===strong?'#ff6b6b':'#58d6ff';
-      ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10;
       if(type==='knuckle'){
-        ctx.fillRect(x-R*0.055,y-R*0.045,R*0.11,R*0.09);
+        // 손가락을 구부려 손톱을 세워 박음: 위에서 내려오다 끝마디가 꺾임
+        const kx=x, ky=y-R*0.30;
+        ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*0.23; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo(mx,my,kx,ky); ctx.stroke();
+        ctx.strokeStyle=SKIN; ctx.lineWidth=R*0.19; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo(mx,my,kx,ky); ctx.stroke();
+        ctx.fillStyle=SKIN; ctx.strokeStyle=SKIN_DK; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.roundRect(x-R*0.09,ky-R*0.02,R*0.18,R*0.30,R*0.05); ctx.fill(); ctx.stroke();
+        ctx.fillStyle=NAIL; ctx.beginPath(); ctx.roundRect(x-R*0.06,y-R*0.09,R*0.12,R*0.1,R*0.03); ctx.fill();
       } else {
-        ctx.beginPath(); ctx.ellipse(x,y,R*0.115,R*0.07,fp[0]*0.7,0,Math.PI*2); ctx.fill();
+        // 몸통 (반투명 살색) + 외곽
+        ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*0.24; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo(mx,my,x,y); ctx.stroke();
+        ctx.strokeStyle=SKIN;    ctx.lineWidth=R*0.20; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.quadraticCurveTo(mx,my,x,y); ctx.stroke();
+        // 관절 주름
+        ctx.strokeStyle='rgba(150,100,78,0.45)'; ctx.lineWidth=1.2;
+        for(const f of [0.42,0.68]){ const jx=x+(ex-x)*f, jy=y+(ey-y)*f; ctx.beginPath(); ctx.moveTo(jx-R*0.085,jy); ctx.lineTo(jx+R*0.085,jy); ctx.stroke(); }
+        // 손끝 패드 — 실밥이 비치게 반투명
+        ctx.fillStyle='rgba(236,196,170,0.55)'; ctx.strokeStyle=SKIN_DK; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.ellipse(x,y,R*0.115,R*0.085,fp[0]*0.6,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        // 손톱
+        ctx.fillStyle=NAIL; ctx.strokeStyle='rgba(190,150,130,0.6)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.ellipse(x,y-R*0.07,R*0.065,R*0.05,fp[0]*0.6,0,Math.PI*2); ctx.fill(); ctx.stroke();
       }
-      ctx.shadowBlur=0; ctx.fillStyle='#17304b'; ctx.font='900 9.5px -apple-system,sans-serif'; ctx.textAlign='center';
-      ctx.fillText(labels[i]||('손가락 '+(i+1)),ex,ey+17);
-      if(i===strong){ctx.fillStyle='#ff6b6b';ctx.font='800 8.5px -apple-system,sans-serif';ctx.fillText('주 압력',ex,ey+29);}
+      // 주 압력
+      if(i===strong){
+        ctx.strokeStyle='rgba(255,110,110,0.9)'; ctx.shadowColor='#ff6a6a'; ctx.shadowBlur=12; ctx.lineWidth=2.2;
+        ctx.beginPath(); ctx.arc(x,y,R*0.16,0,Math.PI*2); ctx.stroke(); ctx.shadowBlur=0;
+      }
       ctx.restore();
+      ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='800 11px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText(labels[i]||'', ex, ey-8);
+      if(i===strong){ ctx.fillStyle='#ff6b6b'; ctx.font='800 9.5px -apple-system,sans-serif'; ctx.fillText('주 압력', ex, ey+4); }
     }
-    (cur.fingers||[]).forEach(contactFinger);
+    (cur.fingers||[]).forEach(finger);
+    // 손끝 밑으로 실밥이 비침 (패드 안쪽만 다시 그림)
+    ctx.save(); ctx.beginPath();
+    for(const fp of (cur.fingers||[])){ ctx.moveTo(cx+fp[0]*R+R*0.115, cy+fp[1]*R); ctx.ellipse(cx+fp[0]*R,cy+fp[1]*R,R*0.115,R*0.085,fp[0]*0.6,0,Math.PI*2); }
+    ctx.clip(); drawSeamsOn(cx,cy,R,rot,0.75,true); ctx.restore();
 
     if(type==='circle'){
-      const rx=cx-R*1.06, ry=cy+R*0.16;
-      ctx.save(); ctx.strokeStyle='#ffd05b'; ctx.lineWidth=R*0.10; ctx.shadowColor='#ffd05b';ctx.shadowBlur=8;
-      ctx.beginPath();ctx.arc(rx,ry,R*0.23,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;
-      ctx.fillStyle='#fff';ctx.font='800 10px -apple-system,sans-serif';ctx.textAlign='center';
-      ctx.fillText('엄지+검지',rx,ry-R*0.32);ctx.fillText('○ 만들기',rx,ry+R*0.38);ctx.restore();
+      // 엄지+검지 동그라미: 공 왼쪽 옆면에 (엄지는 따로 안 그림)
+      const rx=cx-R*0.80, ry=cy+R*0.28;
+      ctx.save(); ctx.lineCap='round';
+      ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*0.30; ctx.beginPath(); ctx.moveTo(cx-R*1.2,cy+R*1.05); ctx.quadraticCurveTo(cx-R*1.25,cy+R*0.6, rx-R*0.22, ry+R*0.1); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=R*0.24; ctx.beginPath(); ctx.moveTo(cx-R*1.2,cy+R*1.05); ctx.quadraticCurveTo(cx-R*1.25,cy+R*0.6, rx-R*0.22, ry+R*0.1); ctx.stroke();
+      ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*0.19; ctx.beginPath(); ctx.arc(rx,ry,R*0.24,0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=R*0.14; ctx.beginPath(); ctx.arc(rx,ry,R*0.24,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='#ffd05b'; ctx.font='800 10px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('엄지+검지 OK', rx, ry+R*0.52); ctx.restore();
     }
     if(type==='split'){
-      ctx.save();ctx.strokeStyle='#ffd05b';ctx.lineWidth=2;ctx.setLineDash([5,4]);
-      ctx.beginPath();ctx.arc(cx,cy-R*0.18,R*0.58,Math.PI*0.80,Math.PI*0.20,true);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='#ffd05b';ctx.font='800 10px -apple-system,sans-serif';ctx.textAlign='center';ctx.fillText('V자로 넓게 벌림',cx,cy-R*0.82);ctx.restore();
+      ctx.save(); ctx.strokeStyle='#ffd05b'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.arc(cx,cy-R*0.18,R*0.60,Math.PI*0.80,Math.PI*0.20,true); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='#ffd05b'; ctx.font='800 10px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillText('V자로 넓게',cx,cy-R*0.86); ctx.restore();
+    }
+    // ── 약지·새끼: 오른쪽 옆에서 공을 감음 ──
+    // 손끝만 공 가장자리에 보이고 몸통은 공 옆을 따라 아래로 감김
+    function fold(tx,ty,len,ang,w){
+      const X=cx+tx*R, Y=cy+ty*R;
+      const bx=cx+R*1.0, by=cy+R*1.15, jx=cx+R*1.2, jy=Y+R*0.45;   // 손바닥(오른쪽 아래)에서 올라와 옆을 감음
+      ctx.save(); ctx.lineCap='round';
+      ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*w*1.25; ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(jx,jy,X,Y); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=R*w; ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(jx,jy,X,Y); ctx.stroke();
+      ctx.fillStyle=NAIL; ctx.beginPath(); ctx.ellipse(X,Y,R*0.05,R*0.065,ang,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    if(type!=='knuckle' && type!=='circle'){ fold(0.86,0.22,0.5,0,0.19); fold(0.90,0.52,0.42,0,0.16); }
+    else if(type==='circle'){ fold(0.90,0.52,0.42,0,0.16); }
+    // ── 엄지: 왼쪽 아래에서 공 밑을 받침 (앞에 보임) ──
+    const th=cur.thumb||[0,0.6];
+    if(type!=='circle'){ const X=cx+th[0]*R*0.7-R*0.08, Y=cy+R*0.80;
+      const sx=cx-R*1.15, sy=cy+R*1.0, jx=cx-R*0.62, jy=cy+R*1.05;
+      ctx.save(); ctx.lineCap='round';
+      ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*0.34; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(jx,jy,X,Y); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=R*0.28; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(jx,jy,X,Y); ctx.stroke();
+      ctx.strokeStyle='rgba(150,100,78,0.45)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(jx-R*0.02,jy-R*0.14); ctx.lineTo(jx+R*0.04,jy+R*0.12); ctx.stroke();
+      ctx.fillStyle=NAIL; ctx.strokeStyle='rgba(190,150,130,0.6)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.ellipse(X+R*0.04,Y-R*0.02,R*0.075,R*0.055,0.4,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle='rgba(255,208,91,0.95)'; ctx.font='800 10px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillText('엄지', X-R*0.1, Y+R*0.30);
     }
 
-    // 엄지는 뒷면에 있어 별도 작은 공으로 분리한다.
-    const ix=W*0.79, iy=H*0.42, ir=Math.min(R*0.48,W*0.13);
-    ctx.fillStyle='rgba(255,255,255,0.10)';ctx.strokeStyle='rgba(255,255,255,0.30)';ctx.lineWidth=1.3;
-    ctx.beginPath();ctx.arc(ix,iy,ir,0,Math.PI*2);ctx.fill();ctx.stroke();
-    const th=cur.thumb||[0,0.6];
-    const tx=ix+th[0]*ir, ty=iy+th[1]*ir*0.75;
-    ctx.fillStyle='#ffd05b';ctx.shadowColor='#ffd05b';ctx.shadowBlur=8;ctx.beginPath();ctx.arc(tx,ty,Math.max(4,ir*0.11),0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-    ctx.fillStyle='#fff';ctx.font='800 11px -apple-system,sans-serif';ctx.textAlign='center';ctx.fillText('공 뒷면',ix,iy-ir-12);ctx.fillText('엄지',tx,ty+18);
+    // ── 옆에서 본 그림 ──
+    const sp=GRIP_SIDE[type]||GRIP_SIDE.fourseam;
+    const ix=W*0.83, iy=H*0.245, ir=Math.min(R*0.36,W*0.095);
+    ctx.save();
+    ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(ix-ir*1.9, iy-ir*1.9, ir*3.6, ir*3.9, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='800 11px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillText('옆에서', ix-ir*0.1, iy-ir*1.55);
+    // 공
+    const sg=ctx.createRadialGradient(ix-ir*0.3,iy-ir*0.3,ir*0.1,ix,iy,ir); sg.addColorStop(0,'#fff'); sg.addColorStop(1,'#cfc6b6');
+    ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(ix,iy,ir,0,Math.PI*2); ctx.fill();
+    // 손바닥 (왼쪽에서, 틈만큼 떨어져)
+    const px=ix-ir-sp.gap*ir*2.2;
+    ctx.strokeStyle='rgba(226,190,162,0.9)'; ctx.lineWidth=ir*0.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(px-ir*0.15, iy-ir*0.9); ctx.quadraticCurveTo(px-ir*0.35, iy, px-ir*0.15, iy+ir*0.9); ctx.stroke();
+    // 손가락: 손바닥 위에서 공 위를 넘어 앞(오른쪽)으로 감아 내려옴
+    const tipY = type==='split' ? iy-ir*0.1 : iy-ir*0.95, tipX = type==='split' ? ix+ir*0.95 : ix+ir*0.45;
+    ctx.strokeStyle='rgba(150,100,78,0.9)'; ctx.lineWidth=ir*0.30;
+    ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy-ir*0.85); ctx.quadraticCurveTo(ix-ir*0.2, iy-ir*(1.25+sp.bend*0.35), tipX, tipY); ctx.stroke();
+    ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=ir*0.24;
+    ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy-ir*0.85); ctx.quadraticCurveTo(ix-ir*0.2, iy-ir*(1.25+sp.bend*0.35), tipX, tipY); ctx.stroke();
+    // 엄지: 손바닥 아래에서 공 밑을 받침
+    ctx.strokeStyle='rgba(150,100,78,0.9)'; ctx.lineWidth=ir*0.30;
+    ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy+ir*0.7); ctx.quadraticCurveTo(ix-ir*0.3, iy+ir*1.25, ix+ir*0.1, iy+ir*0.98); ctx.stroke();
+    ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=ir*0.24;
+    ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy+ir*0.7); ctx.quadraticCurveTo(ix-ir*0.3, iy+ir*1.25, ix+ir*0.1, iy+ir*0.98); ctx.stroke();
+    // 틈 표시
+    if(sp.gap>0.05){
+      ctx.strokeStyle='rgba(255,208,91,0.9)'; ctx.lineWidth=1.5; ctx.setLineDash([2,3]);
+      ctx.beginPath(); ctx.moveTo(px+ir*0.05, iy); ctx.lineTo(ix-ir, iy); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.fillStyle='rgba(255,208,91,0.95)'; ctx.font='700 9.5px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(sp.txt, ix-ir*0.1, iy+ir*1.75);
+    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='600 9px -apple-system,sans-serif';
+    ctx.fillText('엄지', ix+ir*0.1, iy+ir*1.30);
+    ctx.restore();
 
-    // 핵심 원칙 카드
-    const cardX=14, cardY=H*0.68, cardW=W-28, cardH=H-cardY-14;
+    // ── 핵심 카드 ──
+    const cardX=14, cardY=H*0.70, cardW=W-28, cardH=H-cardY-14;
     ctx.fillStyle='rgba(10,18,31,0.92)';ctx.strokeStyle='rgba(85,113,155,0.48)';ctx.lineWidth=1.3;
     ctx.beginPath();ctx.roundRect(cardX,cardY,cardW,cardH,12);ctx.fill();ctx.stroke();
     ctx.fillStyle=cur.color;ctx.font='800 12px -apple-system,sans-serif';ctx.textAlign='left';ctx.fillText('잡는 법의 핵심',cardX+12,cardY+20);
     ctx.fillStyle='#d8dfeb';ctx.font='13px -apple-system,sans-serif';ctx.textAlign='left';
     wrapText(cur.gripTxt||'',cardX+12,cardY+41,cardW-24,18);
     ctx.fillStyle='rgba(255,255,255,0.50)';ctx.font='700 10px -apple-system,sans-serif';
-    ctx.fillText('● 파랑: 접촉점   ● 빨강: 더 강하게 누르는 손가락   ● 노랑: 엄지/특수 동작',cardX+12,cardY+cardH-12);
+    ctx.fillText('손끝 밑에 비치는 빨간 선 = 짚는 실밥   ● 빨강 링: 더 강하게 누르는 손가락   ● 노랑: 엄지',cardX+12,cardY+cardH-12);
   }
 
-  // 그립 타입별 실밥
-  function drawSeams(cx,cy,R,type){
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.strokeStyle='#c33c4e';
-    ctx.lineCap='round';
-    // 회전: 포심/스플리터는 가로 실밥(말굽이 위아래), 투심/싱커는 세로 실밥
-    let rot=cur.seamRot;
-    ctx.rotate(rot);
-    const seam=(R0,a0,a1,cxx)=>{
-      ctx.lineWidth=Math.max(3,R*0.05);
-      ctx.beginPath();
-      ctx.arc(cxx,0,R0,a0,a1);
-      ctx.stroke();
-      // 바늘땀
-      ctx.lineWidth=Math.max(1.5,R*0.022);
-      const steps=11;
-      for(let i=0;i<=steps;i++){
-        const a=a0+(a1-a0)*i/steps;
-        const ax=cxx+Math.cos(a)*R0, ay=Math.sin(a)*R0;
-        const nx=Math.cos(a), ny=Math.sin(a);
-        ctx.beginPath();
-        ctx.moveTo(ax-ny*R*0.07-nx*R*0.02, ay+nx*R*0.07-ny*R*0.02);
-        ctx.lineTo(ax+ny*R*0.07+nx*R*0.02, ay-nx*R*0.07+ny*R*0.02);
-        ctx.stroke();
-      }
-    };
-    // 말굽 두 줄 (좌우 대칭)
-    seam(R*1.5,  Math.PI-0.62, Math.PI+0.62, -R*1.25);
-    seam(R*1.5, -0.62, 0.62, R*1.25);
-    ctx.restore();
-  }
-
-  // ── 그립 손 렌더링: 실제 그립 사진 구도를 그대로 옮김 ──
-  // 사진에서 보이는 것: 공이 카메라를 보고, 검지·중지 끝마디가 실밥을 짚고,
-  // 손가락 몸통이 공 위 테두리를 넘어 손등(너클)으로 이어지며, 엄지가 아래를 받친다.
-  function drawFingers(cx,cy,R,type){
-    const SKIN      ='rgba(226,190,162,0.97)';
-    const SKIN_DK   ='rgba(146,98,76,0.92)';
-    const SKIN_HI   ='rgba(246,222,202,0.55)';
-    const CREASE    ='rgba(150,105,85,0.5)';
-
-    // 손등·너클 중심 (손가락들이 여기로 모임)
-    const hb={x:cx, y:cy-R*1.18, w:R*1.42};
-
-    // 위로 뻗는 손가락: 공 위 접점(tip) → 관절 → 손등 속으로
-    function fingerUp(tipX,tipY,ang,wide,label,pressure){
-      const tx=cx+tipX*R, ty=cy+tipY*R;
-      // 접촉 그림자 — 손가락이 공을 '누르고 있음'
-      ctx.save();
-      ctx.globalAlpha=0.22;
-      ctx.fillStyle='#503020';
-      ctx.beginPath();
-      ctx.ellipse(tx, ty+R*0.05, R*0.13, R*0.075, ang*0.5, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-      // 손가락 몸통: 끝(가늘게) → 너클(굵게), 사진처럼 위로 뻗어 손등에 합류
-      const kx=hb.x + tipX*R*0.60 + Math.sin(ang)*R*0.18;
-      const ky=hb.y + R*0.14;
-      const jx=tx+(kx-tx)*0.46 + Math.sin(ang)*R*0.10;
-      const jy=ty+(ky-ty)*0.46;
-      ctx.save();
-      ctx.lineCap='round';
-      // 외곽
-      ctx.strokeStyle=SKIN_DK;
-      ctx.lineWidth=R*wide*1.08;
-      ctx.beginPath(); ctx.moveTo(tx,ty); ctx.quadraticCurveTo((tx+jx)/2,(ty+jy)/2, jx,jy); ctx.stroke();
-      ctx.lineWidth=R*wide*1.34;
-      ctx.beginPath(); ctx.moveTo(jx,jy); ctx.quadraticCurveTo((jx+kx)/2,(jy+ky)/2, kx,ky); ctx.stroke();
-      // 살
-      ctx.strokeStyle=SKIN;
-      ctx.lineWidth=R*wide*0.92;
-      ctx.beginPath(); ctx.moveTo(tx,ty); ctx.quadraticCurveTo((tx+jx)/2,(ty+jy)/2, jx,jy); ctx.stroke();
-      ctx.lineWidth=R*wide*1.18;
-      ctx.beginPath(); ctx.moveTo(jx,jy); ctx.quadraticCurveTo((jx+kx)/2,(jy+ky)/2, kx,ky); ctx.stroke();
-      // 윗면 하이라이트
-      ctx.strokeStyle=SKIN_HI;
-      ctx.lineWidth=R*wide*0.32;
-      ctx.beginPath();
-      ctx.moveTo(tx-R*wide*0.16, ty-R*0.02);
-      ctx.quadraticCurveTo(jx-R*wide*0.2, jy, kx-R*wide*0.22, ky);
-      ctx.stroke();
-      // 관절 주름 2개
-      ctx.strokeStyle=CREASE;
-      ctx.lineWidth=1.2;
-      const pang=Math.atan2(ky-ty,kx-tx)+Math.PI/2;
-      for(const f of [0.46,0.72]){
-        const mx2=tx+(kx-tx)*f, my2=ty+(ky-ty)*f;
-        ctx.beginPath();
-        ctx.moveTo(mx2+Math.cos(pang)*R*wide*0.42, my2+Math.sin(pang)*R*wide*0.42);
-        ctx.lineTo(mx2-Math.cos(pang)*R*wide*0.42, my2-Math.sin(pang)*R*wide*0.42);
-        ctx.stroke();
-      }
-      // 손톱 (끝마디 — 사진에서 보이는 그 각도)
-      ctx.fillStyle='rgba(248,232,220,0.95)';
-      ctx.strokeStyle='rgba(190,150,130,0.6)';
-      ctx.lineWidth=1;
-      ctx.beginPath();
-      ctx.ellipse(tx, ty-R*0.015, R*0.062, R*0.082, ang*0.5, 0, Math.PI*2);
-      ctx.fill(); ctx.stroke();
-      // 압력 강조
-      if(pressure>1){
-        ctx.strokeStyle='rgba(255,110,110,0.8)';
-        ctx.shadowColor='#ff6a6a'; ctx.shadowBlur=10;
-        ctx.lineWidth=2;
-        ctx.beginPath(); ctx.arc(tx,ty,R*0.145,0,Math.PI*2); ctx.stroke();
-      }
-      ctx.restore();
-      if(label){
-        ctx.fillStyle='rgba(255,255,255,0.9)';
-        ctx.font='700 11px -apple-system,sans-serif';
-        ctx.textAlign='center';
-        ctx.fillText(label, tx, ty+R*0.30);
-      }
-    }
-
-    // 공 옆을 감아 받치는 접힌 약지·새끼 (아래로 말림)
-    function foldFinger(tipX,tipY,len,ang,wide){
-      const tx=cx+tipX*R, ty=cy+tipY*R;
-      const dx=Math.sin(ang), dy=Math.cos(ang);
-      const jx=tx+dx*len*R*0.45, jy=ty+dy*len*R*0.45;
-      const bx=tx+dx*len*R,      by=ty+dy*len*R;
-      ctx.save();
-      ctx.lineCap='round';
-      ctx.strokeStyle=SKIN_DK;
-      ctx.lineWidth=R*wide*1.3;
-      ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(jx,jy, tx,ty); ctx.stroke();
-      ctx.strokeStyle=SKIN;
-      ctx.lineWidth=R*wide*1.06;
-      ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(jx,jy, tx,ty); ctx.stroke();
-      // 손톱
-      ctx.fillStyle='rgba(248,232,220,0.9)';
-      ctx.beginPath();
-      ctx.ellipse(tx,ty,R*0.055,R*0.07,ang,0,Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // 손등 + 너클 — 손가락 위끝을 덮어 '손에서 나온' 형태로 만드는 층
-    function handBack(offX, width, yOff){
-      const hx=hb.x+offX*R, hy=hb.y+(yOff||0)*R, hw=width*R;
-      ctx.save();
-      // 손목
-      const wg=ctx.createLinearGradient(hx,hy-R*0.8,hx,hy);
-      wg.addColorStop(0,'rgba(206,166,138,0.9)');
-      wg.addColorStop(1,'rgba(222,184,156,0.98)');
-      ctx.fillStyle=wg;
-      ctx.beginPath();
-      ctx.moveTo(hx-hw*0.34, hy-R*0.85);
-      ctx.quadraticCurveTo(hx-hw*0.42, hy-R*0.3, hx-hw*0.46, hy+R*0.05);
-      ctx.lineTo(hx+hw*0.46, hy+R*0.05);
-      ctx.quadraticCurveTo(hx+hw*0.42, hy-R*0.3, hx+hw*0.34, hy-R*0.85);
-      ctx.closePath(); ctx.fill();
-      // 손등 본체
-      const g=ctx.createLinearGradient(hx,hy-R*0.35,hx,hy+R*0.35);
-      g.addColorStop(0,'rgba(232,198,170,0.99)');
-      g.addColorStop(1,'rgba(210,168,138,0.99)');
-      ctx.fillStyle=g;
-      ctx.strokeStyle='rgba(146,98,76,0.7)';
-      ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.moveTo(hx-hw*0.5, hy-R*0.18);
-      ctx.quadraticCurveTo(hx-hw*0.55, hy+R*0.22, hx-hw*0.34, hy+R*0.30);
-      // 너클 4개 볼록볼록한 아랫선
-      for(let i=0;i<4;i++){
-        const x1=hx-hw*0.34+hw*0.68*(i+0.5)/4;
-        const x2=hx-hw*0.34+hw*0.68*(i+1)/4;
-        ctx.quadraticCurveTo(x1, hy+R*0.42, x2, hy+R*0.30);
-      }
-      ctx.quadraticCurveTo(hx+hw*0.55, hy+R*0.22, hx+hw*0.5, hy-R*0.18);
-      ctx.quadraticCurveTo(hx, hy-R*0.42, hx-hw*0.5, hy-R*0.18);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      // 너클 음영 점
-      ctx.fillStyle='rgba(150,105,85,0.35)';
-      for(let i=0;i<4;i++){
-        const kx2=hx-hw*0.34+hw*0.68*(i+0.5)/4;
-        ctx.beginPath(); ctx.ellipse(kx2, hy+R*0.27, R*0.05, R*0.035, 0, 0, Math.PI*2); ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // 엄지: 아래에서 받치는 굽은 형태 + 손바닥 언덕
-    function thumb(tipX,tipY){
-      const tx=cx+tipX*R, ty=cy+tipY*R;
-      ctx.save();
-      ctx.fillStyle='rgba(214,174,146,0.40)';
-      ctx.beginPath();
-      ctx.ellipse(tx+R*0.15, ty+R*1.02, R*0.52, R*0.32, 0.1, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle='rgba(222,184,156,0.60)';
-      ctx.beginPath();
-      ctx.ellipse(tx-R*0.02, ty+R*0.56, R*0.72, R*0.38, -0.22, 0, Math.PI*2);
-      ctx.fill();
-      ctx.strokeStyle='rgba(150,105,85,0.30)';
-      ctx.lineWidth=1.5;
-      ctx.beginPath();
-      ctx.moveTo(tx-R*0.35, ty+R*0.42);
-      ctx.quadraticCurveTo(tx+R*0.05, ty+R*0.62, tx+R*0.42, ty+R*0.52);
-      ctx.stroke();
-      ctx.globalAlpha=0.2;
-      ctx.fillStyle='#503020';
-      ctx.beginPath();
-      ctx.ellipse(tx, ty-R*0.03, R*0.12, R*0.07, 0.3, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalAlpha=1;
-      ctx.lineCap='round';
-      const j1x=tx-R*0.14, j1y=ty+R*0.24;
-      ctx.strokeStyle='rgba(146,98,76,0.9)';
-      ctx.lineWidth=R*0.33;
-      ctx.beginPath(); ctx.moveTo(tx-R*0.38, ty+R*0.55); ctx.quadraticCurveTo(tx-R*0.3,ty+R*0.38, j1x,j1y); ctx.stroke();
-      ctx.lineWidth=R*0.29;
-      ctx.beginPath(); ctx.moveTo(j1x,j1y); ctx.quadraticCurveTo(tx-R*0.05,ty+R*0.08, tx,ty); ctx.stroke();
-      ctx.strokeStyle='rgba(226,190,162,0.92)';
-      ctx.lineWidth=R*0.28;
-      ctx.beginPath(); ctx.moveTo(tx-R*0.38, ty+R*0.55); ctx.quadraticCurveTo(tx-R*0.3,ty+R*0.38, j1x,j1y); ctx.stroke();
-      ctx.lineWidth=R*0.24;
-      ctx.beginPath(); ctx.moveTo(j1x,j1y); ctx.quadraticCurveTo(tx-R*0.05,ty+R*0.08, tx,ty); ctx.stroke();
-      ctx.strokeStyle='rgba(245,220,200,0.5)';
-      ctx.lineWidth=R*0.08;
-      ctx.beginPath(); ctx.moveTo(tx-R*0.34,ty+R*0.48); ctx.quadraticCurveTo(j1x,j1y-R*0.05, tx-R*0.02,ty+R*0.02); ctx.stroke();
-      ctx.fillStyle='rgba(248,232,220,0.95)';
-      ctx.strokeStyle='rgba(190,150,130,0.6)';
-      ctx.lineWidth=1;
-      ctx.beginPath(); ctx.ellipse(tx,ty,R*0.07,R*0.05,0.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle='rgba(255,255,255,0.6)';
-      ctx.font='600 10px -apple-system,sans-serif';
-      ctx.textAlign='center';
-      ctx.fillText('엄지', tx-R*0.25, ty+R*0.34);
-    }
-
-    switch(type){
-      case 'fourseam': // 검지·중지 모아 가로 실밥 위
-        fingerUp(-0.17,-0.42,-0.10,0.20,'검지',1);
-        fingerUp( 0.17,-0.42, 0.10,0.20,'중지',1);
-        foldFinger(0.72,0.36,0.55, 0.55,0.15);
-        foldFinger(0.84,0.58,0.45, 0.85,0.13);
-        handBack(0,1.42,0);
-        thumb(0,0.62); break;
-      case 'twoseam': // 좁게 모아 세로 실밥
-        fingerUp(-0.10,-0.44,-0.04,0.19,'검지',1.3);
-        fingerUp( 0.10,-0.44, 0.04,0.19,'중지',1);
-        foldFinger(0.72,0.36,0.55, 0.55,0.15);
-        foldFinger(0.84,0.58,0.45, 0.85,0.13);
-        handBack(0,1.36,0);
-        thumb(0,0.62); break;
-      case 'cutter': // 살짝 글러브쪽으로
-        fingerUp(-0.02,-0.44,-0.06,0.19,'검지',1.4);
-        fingerUp( 0.22,-0.40, 0.14,0.19,'중지',1);
-        foldFinger(0.74,0.34,0.55, 0.55,0.15);
-        foldFinger(0.85,0.56,0.45, 0.85,0.13);
-        handBack(0.10,1.40,0);
-        thumb(-0.1,0.6); break;
-      case 'slider': // 바깥 절반, 중지 실밥에 걸기
-        fingerUp( 0.06,-0.43, 0.04,0.19,'검지',1);
-        fingerUp( 0.30,-0.36, 0.22,0.19,'중지',1.4);
-        foldFinger(0.78,0.32,0.5, 0.6,0.15);
-        foldFinger(0.87,0.54,0.42, 0.9,0.13);
-        handBack(0.18,1.40,0);
-        thumb(-0.16,0.58); break;
-      case 'curve': // 바짝 모으고 중지 깊게
-        fingerUp(-0.06,-0.44,-0.08,0.18,'검지',1);
-        fingerUp( 0.14,-0.43, 0.02,0.18,'중지',1.5);
-        foldFinger(0.72,0.36,0.55, 0.55,0.15);
-        foldFinger(0.84,0.58,0.45, 0.85,0.13);
-        handBack(0.04,1.38,0);
-        thumb(0.02,0.6); break;
-      case 'circle': // 서클 체인지업 — 엄지+검지 동그라미, 나머지 세 손가락이 공 위
-        ctx.save();
-        ctx.strokeStyle='rgba(228,196,170,0.95)';
-        ctx.lineWidth=R*0.13;
-        ctx.beginPath();
-        ctx.arc(cx-R*0.42, cy+R*0.12, R*0.26, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.restore();
-        ctx.fillStyle='rgba(255,255,255,0.8)';
-        ctx.font='700 11px -apple-system,sans-serif';
-        ctx.textAlign='center';
-        ctx.fillText('○ 서클', cx-R*0.42, cy-R*0.22);
-        fingerUp( 0.02,-0.44, 0.00,0.18,'중지',1);
-        fingerUp( 0.26,-0.38, 0.18,0.17,'약지',1);
-        foldFinger(0.82,0.52,0.45, 0.85,0.13);
-        handBack(0.14,1.36,0);
-        thumb(-0.05,0.6); break;
-      case 'split': // V자로 쫙 벌림
-        fingerUp(-0.42,-0.28,-0.40,0.19,'검지',1);
-        fingerUp( 0.42,-0.28, 0.40,0.19,'중지',1);
-        foldFinger(0.60,0.52,0.5, 0.7,0.14);
-        foldFinger(0.76,0.70,0.42, 0.95,0.12);
-        handBack(0,1.85,0.06);
-        thumb(0,0.62);
-        ctx.save();
-        ctx.strokeStyle='rgba(120,170,255,0.4)';
-        ctx.lineWidth=2; ctx.setLineDash([4,4]);
-        ctx.beginPath();
-        ctx.arc(cx,cy-R*0.3,R*0.5,Math.PI*0.78,Math.PI*0.22,true);
-        ctx.stroke(); ctx.setLineDash([]);
-        ctx.restore(); break;
-      case 'knuckle': // 손톱 세우기 — 주먹 쥔 손이 공 위를 덮음
-        handBack(0,1.5,0.55);
-        for(const fx of [-0.2,0,0.2]){
-          const tx=cx+fx*R, ty=cy-R*0.46;
-          ctx.save();
-          ctx.fillStyle='rgba(228,196,170,0.95)';
-          ctx.strokeStyle='rgba(150,110,90,0.6)';
-          ctx.lineWidth=1.2;
-          // 접힌 끝마디 (세운 손톱)
-          ctx.beginPath();
-          ctx.rect(tx-R*0.055,ty-R*0.02,R*0.11,R*0.20);
-          ctx.fill(); ctx.stroke();
-          ctx.fillStyle='rgba(248,232,220,0.95)';
-          ctx.beginPath();
-          ctx.ellipse(tx,ty+R*0.02,R*0.045,R*0.055,0,0,Math.PI*2);
-          ctx.fill();
-          ctx.shadowColor='#ff6a6a'; ctx.shadowBlur=8;
-          ctx.fillStyle='#ff8a8a';
-          ctx.beginPath(); ctx.arc(tx,ty,R*0.05,0,Math.PI*2); ctx.fill();
-          ctx.restore();
-        }
-        ctx.fillStyle='rgba(255,255,255,0.8)';
-        ctx.font='700 11px -apple-system,sans-serif';
-        ctx.textAlign='center';
-        ctx.fillText('손톱을 세워 박기', cx, cy-R*0.72);
-        foldFinger(0.80,0.42,0.45, 0.8,0.14);
-        thumb(0,0.62); break;
-      default:
-        fingerUp(-0.17,-0.42,-0.10,0.20,'검지',1);
-        fingerUp( 0.17,-0.42, 0.10,0.20,'중지',1);
-        handBack(0,1.42,0);
-        thumb(0,0.62);
-    }
-  }
-
-  // 캔버스 텍스트 줄바꿈
   function wrapText(text,x,y,maxW,lh){
     const chars=text.split('');
     let line='', yy=y;
