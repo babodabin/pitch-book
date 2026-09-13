@@ -137,7 +137,7 @@
   .d-card.course .lb { color:#ff9a3d; }
 
   /* ── 한 이닝 게임 ── */
-  #page.game #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 게임: 화면 아래까지 */
+  #page.game #canvas-box { height:calc(100vh - 315px); height:calc(100dvh - 315px); min-height:420px; }  /* 게임: 아래 투구 버튼 자리만 남김 */
   #page.game #detail { display:none; }
   #page.front #detail { display:none; }   /* 읽을거리는 그립 탭에 */
   #matchup { font-size:11.5px; font-weight:600; padding:6px 10px; max-width:60%; white-space:nowrap; }
@@ -176,14 +176,14 @@
     font-size:16px; font-weight:800; letter-spacing:0.02em; text-align:center; line-height:1.3;
   }
   #game-msg small { display:block; font-size:11px; font-weight:600; color:#8a93a3; letter-spacing:0; }
+  #game-controls { display:none; padding:12px 16px 8px 16px; }
   #throw-btn {
-    display:none; position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
-    font-size:18px; font-weight:800; letter-spacing:0.06em;
-    padding:13px 44px; border-radius:14px; border:none;
-    background:#fff; color:#000; box-shadow:0 4px 18px rgba(0,0,0,0.45);
+    width:100%; font-size:18px; font-weight:800; letter-spacing:0.06em;
+    padding:15px 0; border-radius:13px; border:none;
+    background:#fff; color:#000;
   }
-  #throw-btn:disabled { background:rgba(255,255,255,0.18); color:rgba(255,255,255,0.45); box-shadow:none; }
-  #throw-btn:not(:disabled):active { transform:translateX(-50%) translateY(2px); }
+  #throw-btn:disabled { background:#10141d; color:#4a5261; border:1.5px solid #2a3242; }
+  #throw-btn:not(:disabled):active { transform:translateY(2px); }
   #game-end {
     display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; gap:12px;
     background:rgba(5,7,12,0.78); backdrop-filter:blur(3px);
@@ -264,7 +264,6 @@
       <div class="gh-bat"></div>
     </div>
     <div id="game-msg"></div>
-    <button id="throw-btn" disabled>투구</button>
     <div id="game-setup">
       <h3>MATCHUP</h3>
       <div class="lb">내 팀</div><div class="row" id="su-my"></div>
@@ -286,6 +285,7 @@
     <button class="mode-btn" id="real-btn">실전 ▶ 실제 속도</button>
     <button class="mode-btn" id="study-btn">학습 ▶ 이해하기</button>
   </div>
+  <div id="game-controls"><button id="throw-btn" disabled>투구</button></div>
   <div id="detail">
     <div class="d-card"><div class="lb">특징</div><div class="tx" id="d-desc"></div></div>
     <div class="d-card use"><div class="lb">용도 — 왜 던지나</div><div class="tx" id="d-use"></div></div>
@@ -1224,7 +1224,7 @@ return {
       $('pitch-bar').style.display = game ? 'none':'flex';
       $('game-bar').style.display = game ? 'flex':'none';
       $('game-hud').style.display = game ? 'block':'none';
-      $('throw-btn').style.display = game ? 'block':'none';
+      $('game-controls').style.display = game ? 'block':'none';
       document.querySelector('.d-card.course').style.display = game ? 'none':'block';
       $('page').classList.toggle('game', game);
       $('page').classList.toggle('front', view==='front');
@@ -2607,8 +2607,8 @@ return {
     const opp=teamOf(setup.opp);
     $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':b.hand==='S'?'스':'우')+'</small>').join(' · ');
   }
-  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('throw-btn').style.display='none'; }
-  function hideSetup(){ $('game-setup').style.display='none'; $('throw-btn').style.display='block'; }
+  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; }
+  function hideSetup(){ $('game-setup').style.display='none'; $('game-controls').style.display='block'; }
   $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); newGame(); });
 
   const RESULT_TXT={
