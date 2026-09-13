@@ -137,13 +137,20 @@
   .d-card.course .lb { color:#ff9a3d; }
 
   /* ── 한 이닝 게임 ── */
-  #page.game #canvas-box { height:calc(100vh - 385px); height:calc(100dvh - 385px); min-height:360px; }  /* 게임: 아래 배너+투구 버튼 자리 */
+  /* 타자 시점·게임: 페이지를 화면 높이에 맞추고 캔버스가 남는 공간을 다 차지 (기기별 고정 숫자 없음) */
+  #page.game, #page.front {
+    display:flex; flex-direction:column;
+    height:calc(100vh - max(env(safe-area-inset-top),10px) - max(env(safe-area-inset-bottom),16px));
+    height:calc(100dvh - max(env(safe-area-inset-top),10px) - max(env(safe-area-inset-bottom),16px));
+  }
+  #page.game > *, #page.front > * { flex:0 0 auto; }
+  #page.game #canvas-box, #page.front #canvas-box { flex:1 1 auto; min-height:300px; height:auto; }
   #page.game #detail { display:none; }
   #page.front #detail { display:none; }   /* 읽을거리는 그립 탭에 */
   #matchup { font-size:11.5px; font-weight:600; padding:6px 10px; max-width:60%; white-space:nowrap; }
   #matchup b { color:#ffd23b; font-weight:800; }
   #matchup .dim { color:#8a93a3; }
-  #page.front #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 타자 시점도 한 이닝과 같은 크기 */
+
   #game-bar { display:none; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px; -webkit-overflow-scrolling:touch; }
   #game-bar::-webkit-scrollbar { display:none; }
   #game-hud {
@@ -1081,6 +1088,28 @@ return {
       RL:'좌타자 바깥 낮게 보더라인 — 백도어 싱커로 존에 걸칩니다.',
       LR:'우타자 바깥 낮게 백도어.',
       LL:'좌타자 몸쪽 낮게 파고드는 땅볼 유도.'}},
+    {key:'kcurve', name:'너클커브', color:'#b48cff', v:128, bx:-0.22, mv:-0.48, shape:'early',
+     tx:-0.05, ty:0.5, spin:'top', spinSpd:0.6, seamRot:0.25,
+     fingers:[[0.0,-0.43],[0.22,-0.38]], thumb:[0,0.58],
+     gripType:'curve', gripTxt:'검지를 구부려 손톱을 실밥에 세워 박고, 중지로 실밥을 겁니다. 나머지는 커브와 같게 — 손목을 엎어 탑스핀을 줍니다.',
+     spinTxt:'분당 2600회 탑스핀 — 검지를 세워 찍은 만큼 회전이 더 걸립니다.',
+     desc:'커브를 손가락 관절로 찍어 던지는 변형. 커브보다 빠르고, 더 늦게, 더 날카롭게 떨어집니다.',
+     use:'커브의 낙차에 속도를 더한 결정구. 직구 타이밍에 나온 배트 밑으로 떨어집니다.',
+     course:{RR:'존 위에서 무릎 아래로. 커브보다 빨라서 존 안에 넣어도 됩니다.',
+      RL:'세로 낙하라 반대 손에도 그대로. 무릎 높이에서 떨어뜨리기.',
+      LR:'가운데 낮게로 떨어뜨리기. 매치업을 타지 않는 결정구.',
+      LL:'높은 데서 낮게 — 커브보다 늦게 꺾여 참기 어렵습니다.'}},
+    {key:'slurve', name:'슬러브', color:'#c6ff5a', v:130, bx:-0.40, mv:-0.28, shape:'gradual',
+     tx:-0.2, ty:0.5, spin:'side', spinSpd:0.6, seamRot:Math.PI/2+0.4,
+     fingers:[[0.06,-0.42],[0.30,-0.34]], thumb:[-0.16,0.57],
+     gripType:'slider', gripTxt:'슬라이더 그립에서 중지를 실밥에 더 깊게 걸고 손목을 조금 더 엎습니다. 슬라이더보다 위에서 아래로 채는 느낌.',
+     spinTxt:'분당 2500회 — 옆회전과 탑스핀이 섞인, 기울어진 회전축.',
+     desc:'슬라이더와 커브의 중간. 슬라이더처럼 옆으로 가면서 커브처럼 떨어지는 대각선 궤적.',
+     use:'옆·아래 두 방향으로 도망가서 배트 각도를 맞추기 어렵습니다. 같은 손 타자 바깥쪽 낮게.',
+     course:{RR:'우타자 바깥쪽 낮게, 대각선으로 빠져나가게. 같은 손 상대의 결정구.',
+      RL:'좌타자 몸쪽 낮게 떨어지는 백풋. 발 앞에 떨어지며 헛스윙.',
+      LR:'우타자 발밑 몸쪽 백풋.',
+      LL:'좌타자 바깥쪽 낮게 대각선으로.'}},
     {key:'knuckle', name:'너클볼', color:'#c9a6ff', v:105, bx:0, mv:0, shape:'knuckle',
      tx:0, ty:0.75, spin:'none', spinSpd:0.015, seamRot:0.6,
      fingers:[[-0.18,-0.36],[0.05,-0.43],[0.28,-0.32]], thumb:[-0.08,0.58],
@@ -1134,6 +1163,8 @@ return {
     'change': {breakAt:0.53, short:'직구처럼, 더 늦게', cue:'팔 스윙은 같고 공만 느리며 가라앉음'},
     'splitter':{breakAt:0.72, short:'홈 앞에서 추락', cue:'직구처럼 버티다가 마지막에 뚝 떨어짐'},
     'sinker': {breakAt:0.48, short:'팔쪽으로 가라앉음', cue:'빠른 속도로 팔쪽·아래로 강하게 이동'},
+    'kcurve': {breakAt:0.40, short:'늦게 크게 낙하', cue:'커브보다 빠르게 오다 날카롭게 떨어짐'},
+    'slurve': {breakAt:0.50, short:'대각선으로', cue:'옆으로 가면서 아래로 — 슬라이더와 커브 사이'},
     'knuckle':{breakAt:0.24, short:'불규칙하게 흔들림', cue:'회전이 거의 없어 진행 방향이 계속 바뀜'}
   };
 
@@ -2563,28 +2594,11 @@ return {
   const E = window.PitchEngine;
   const TABLE = (E && window.PITCH_TABLE) ? E.buildTable(window.PITCH_TABLE) : null;
 
-  // 도감에 없는 두 구종 — 궤적값은 설계값 (기획서 7절)
-  const KC_PITCH={key:'kcurve', name:'너클커브', color:'#b48cff', v:128, bx:-0.22, mv:-0.48, shape:'early',
-     tx:-0.05, ty:0.5, spin:'top', spinSpd:0.6, seamRot:0.25,
-     fingers:[[0.0,-0.43],[0.22,-0.38]], thumb:[0,0.58],
-     gripType:'curve', gripTxt:'검지를 구부려 손톱을 실밥에 세워 박고, 중지로 실밥을 겁니다. 나머지는 커브와 같게 — 손목을 엎어 탑스핀을 줍니다.',
-     spinTxt:'분당 2600회 탑스핀 — 검지를 세워 찍은 만큼 회전이 더 걸립니다.',
-     desc:'커브를 손가락 관절로 찍어 던지는 변형. 커브보다 빠르고, 더 늦게, 더 날카롭게 떨어집니다.',
-     use:'커브의 낙차에 속도를 더한 결정구. 직구 타이밍에 나온 배트 밑으로 떨어집니다.',
-     course:{RR:'',RL:'',LR:'',LL:''}};
-  const SV_PITCH={key:'slurve', name:'슬러브', color:'#c6ff5a', v:130, bx:-0.40, mv:-0.28, shape:'gradual',
-     tx:-0.2, ty:0.5, spin:'side', spinSpd:0.6, seamRot:Math.PI/2+0.4,
-     fingers:[[0.06,-0.42],[0.30,-0.34]], thumb:[-0.16,0.57],
-     gripType:'slider', gripTxt:'슬라이더 그립에서 중지를 실밥에 더 깊게 걸고 손목을 조금 더 엎습니다. 슬라이더보다 위에서 아래로 채는 느낌.',
-     spinTxt:'분당 2500회 — 옆회전과 탑스핀이 섞인, 기울어진 회전축.',
-     desc:'슬라이더와 커브의 중간. 슬라이더처럼 옆으로 가면서 커브처럼 떨어지는 대각선 궤적.',
-     use:'옆·아래 두 방향으로 도망가서 배트 각도를 맞추기 어렵습니다. 같은 손 타자 바깥쪽 낮게.',
-     course:{RR:'',RL:'',LR:'',LL:''}};
   const byKey=k=>PITCHES.find(p=>p.key===k);
   // 게임 구종 10종 → 도감 궤적 (투심은 싱커에 합침, 너클볼 없음)
   const GAME_PITCHES=[
     ['FF',byKey('4seam')], ['SI',byKey('sinker')], ['FC',byKey('cutter')], ['SL',byKey('slider')], ['ST',byKey('sweeper')],
-    ['CU',byKey('curve')], ['KC',KC_PITCH], ['CH',byKey('change')], ['FS',byKey('splitter')], ['SV',SV_PITCH]
+    ['CU',byKey('curve')], ['KC',byKey('kcurve')], ['CH',byKey('change')], ['FS',byKey('splitter')], ['SV',byKey('slurve')]
   ];
   const GAME_PITCH_MAP=Object.fromEntries(GAME_PITCHES);
 
