@@ -84,23 +84,25 @@ if (mode === 'one') {
   const N = 50000;
   const rng = E.mulberry32(20260913);
 
-  console.log('== 1. 표 되돌리기: 실제 사용 빈도대로 던지고 실투 끔  →  실제 타석 결과와 맞아야 함');
+  console.log('== 1. 표 되돌리기: 실제 사용 빈도대로 던지고 실투·타자 AI·난이도 끔  →  실제 타석 결과와 맞아야 함');
+  const hit0 = E.AI.hit; E.AI.hit = 1;   // 표 자체를 검증하는 구간이라 난이도·노림은 끔
   header();
-  printRow('보정 없음·위치도 무관', runMany(N, 'RR', (hh) => E.makeUsagePolicy(table, hh, rng, null), { wobble: false, countAdjust: false, rng }));
-  printRow('보정 있음·위치 무관', runMany(N, 'RR', (hh) => E.makeUsagePolicy(table, hh, rng, null), { wobble: false, rng }));
+  printRow('보정 없음·위치도 무관', runMany(N, 'RR', (hh) => E.makeUsagePolicy(table, hh, rng, null), { wobble: false, countAdjust: false, ai: false, rng }));
+  printRow('보정 있음·위치 무관', runMany(N, 'RR', (hh) => E.makeUsagePolicy(table, hh, rng, null), { wobble: false, ai: false, rng }));
   for (const h of E.HANDS)
-    printRow(h + ' (보정·위치 다 반영)', runMany(N, h, (hh) => E.makeUsagePolicy(table, hh, rng), { wobble: false, rng }));
+    printRow(h + ' (보정·위치 다 반영)', runMany(N, h, (hh) => E.makeUsagePolicy(table, hh, rng), { wobble: false, ai: false, rng }));
   // 좌우 4조합을 실제 비율로 섞은 값
   const mix = { n: 0, cnt: {}, ppa: 0 }; for (const o of OUTCOMES) mix.cnt[o] = 0;
   const totN = E.HANDS.reduce((s, h) => s + E.ZONES.reduce((t, z) => t + E.PITCH_TYPES.reduce((u, p) => u + table.ns[`${p}|${z}|${h}`], 0), 0), 0);
   let ppaAcc = 0;
   for (const h of E.HANDS) {
     const share = E.ZONES.reduce((t, z) => t + E.PITCH_TYPES.reduce((u, p) => u + table.ns[`${p}|${z}|${h}`], 0), 0) / totN;
-    const r = runMany(Math.round(N * share), h, (hh) => E.makeUsagePolicy(table, hh, rng), { wobble: false, rng });
+    const r = runMany(Math.round(N * share), h, (hh) => E.makeUsagePolicy(table, hh, rng), { wobble: false, ai: false, rng });
     mix.n += r.n; for (const o of OUTCOMES) mix.cnt[o] += r.cnt[o]; ppaAcc += r.ppa * r.n;
   }
   mix.ppa = ppaAcc / mix.n;
   printRow('4조합 합침', mix, REF);
+  E.AI.hit = hit0;
 
   console.log('\n== 2. 같은 정책에 실투만 켬  →  얼마나 달라지나');
   header();
