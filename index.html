@@ -2429,7 +2429,7 @@ return {
 
   function loop(){
     const t=performance.now();
-    if(view==='front'){ drawFront(t); drawOuterZones(); if(dexAim) drawAimAt(dexAim); }
+    if(view==='front'){ drawFront(t); drawOuterZones(); drawFarGrid(); if(dexAim) drawAimAt(dexAim); }
     else if(view==='side') drawSide(t);
     else if(view==='game'){ drawFront(t); gameFrame(); }
     else drawGrip();
