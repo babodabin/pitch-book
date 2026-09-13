@@ -135,6 +135,13 @@
   .d-card .tx { font-size:16px; line-height:1.65; color:#cdd4e0; }
   .d-card.use .lb { color:#52e07a; }
   .d-card.course .lb { color:#ff9a3d; }
+  .d-card.course .tx { font-size:15px; }
+  .d-card.course .row { display:flex; gap:8px; margin-bottom:6px; align-items:baseline; }
+  .d-card.course .row:last-child { margin-bottom:0; }
+  .d-card.course .k { flex:0 0 58px; font-size:12px; font-weight:800; color:#ff9a3d; letter-spacing:0.02em; }
+  .d-card.course .v { flex:1; }
+  .d-card.course .v b { color:#ffd23b; font-weight:800; }
+  .d-card.course .v .dim { color:#8a93a3; font-size:13px; }
 
   /* ── 한 이닝 게임 ── */
   /* 타자 시점·게임: 페이지를 화면 높이에 맞추고 캔버스가 남는 공간을 다 차지 (기기별 고정 숫자 없음) */
@@ -146,7 +153,10 @@
   #page.game > *, #page.front > * { flex:0 0 auto; }
   #page.game #canvas-box, #page.front #canvas-box { flex:1 1 auto; min-height:300px; height:auto; }
   #page.game #detail { display:none; }
-  #page.front #detail { display:none; }   /* 읽을거리는 그립 탭에 */
+  #page.front #detail { display:none; }
+  /* 카드 나누기: 움직임 분석 = 특징·추천 코스 / 그립 = 용도·회전 */
+  #page.side .d-card.use, #page.side .d-card.spin { display:none; }
+  #page.grip .d-card.feat, #page.grip .d-card.course { display:none; }
   #matchup { font-size:11.5px; font-weight:600; padding:6px 10px; max-width:60%; white-space:nowrap; }
   #matchup b { color:#ffd23b; font-weight:800; }
   #matchup .dim { color:#8a93a3; }
@@ -293,10 +303,10 @@
   </div>
   <div id="game-controls"><div id="game-msg"></div><button id="throw-btn" disabled>투구</button></div>
   <div id="detail">
-    <div class="d-card"><div class="lb">특징</div><div class="tx" id="d-desc"></div></div>
+    <div class="d-card feat"><div class="lb">특징</div><div class="tx" id="d-desc"></div></div>
     <div class="d-card use"><div class="lb">용도 — 왜 던지나</div><div class="tx" id="d-use"></div></div>
     <div class="d-card course"><div class="lb" id="d-course-lb">추천 코스</div><div class="tx" id="d-course"></div></div>
-    <div class="d-card"><div class="lb">회전</div><div class="tx" id="d-spin"></div></div>
+    <div class="d-card spin"><div class="lb">회전</div><div class="tx" id="d-spin"></div></div>
   </div>
 </div>
 
@@ -1239,7 +1249,9 @@ return {
     // 추천 코스 — 4개 매치업(우투우타/우투좌타/좌투우타/좌투좌타) 중 현재 조합
     const mk=matchKey();
     $('d-course-lb').textContent='추천 코스 — '+(lefty?'좌투':'우투')+' vs '+(batLefty?'좌타':'우타');
-    $('d-course').textContent = (typeof cur.course==='string') ? cur.course : cur.course[mk];
+    const courseTxt = (typeof cur.course==='string') ? cur.course : cur.course[mk];
+    if(typeof dexCourseHtml==='function') $('d-course').innerHTML = dexCourseHtml(courseTxt);
+    else $('d-course').textContent = courseTxt;
     $('d-spin').textContent=cur.spinTxt;
     if(typeof dexSummary==='function' && $('matchup')) $('matchup').innerHTML = dexSummary();
   }
@@ -1253,7 +1265,7 @@ return {
       const game = view==='game';
       const show = (view==='front'||view==='side'||game) ? 'flex':'none';
       $('hand-wrap').style.display = game ? 'none' : show;
-      $('bat-btn').style.display = view==='front' ? 'block':'none';
+      $('bat-btn').style.display = (view==='front'||view==='side') ? 'block':'none';
       $('matchup').style.display = view==='front' ? 'block':'none';
       $('cmp-bar').style.display = view==='side' ? 'flex':'none';
       $('controls').style.display = (view==='grip'||game) ? 'none':'flex';
@@ -1261,9 +1273,11 @@ return {
       $('game-bar').style.display = game ? 'flex':'none';
       $('game-hud').style.display = game ? 'block':'none';
       $('game-controls').style.display = game ? 'flex':'none';
-      document.querySelector('.d-card.course').style.display = game ? 'none':'block';
+      document.querySelector('.d-card.course').style.display = game ? 'none':'';
       $('page').classList.toggle('game', game);
       $('page').classList.toggle('front', view==='front');
+      $('page').classList.toggle('side', view==='side');
+      $('page').classList.toggle('grip', view==='grip');
       resize();
       if(game){ if(!wasGame) enterGame(); return; }
       if(wasGame) leaveGame();
@@ -3112,6 +3126,43 @@ return {
                           : '<span class="dim">앞 공 영향 작음</span>';
     return line1+'<br>'+line2+'<br><span class="dim" style="font-size:10px">★ 카운트 잡기 · ◆ 결정구(2S)</span>';
   }
+  // 추천 코스 카드: 어디에 / 언제 / 누구한테 / 앞 공 / 던지는 투수 — 실측 + 정석
+  function dexCourseHtml(courseTxt){
+    const code=DEX_CODE[cur.key];
+    const esc=(t)=>String(t).replace(/</g,'&lt;');
+    const row=(k,v)=>'<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>';
+    if(!code || !TABLE) return row('정석', esc(courseTxt))+row('실측', '<span class="dim">데이터 없음 (너클볼)</span>');
+    const h=dexHeat(), mk=matchKey();
+    // 어디에
+    const where = (h.best===h.bestFin)
+      ? '<b>★◆ '+zoneName(h.best)+'</b> <span class="dim">카운트 잡기·결정구 같은 자리</span>'
+      : '<b>★ '+zoneName(h.best)+'</b> <span class="dim">카운트 잡기</span> · <b>◆ '+zoneName(h.bestFin)+'</b> <span class="dim">결정구</span>';
+    // 언제: 이 공의 헛스윙·루킹 비율을 리그 평균과 비교
+    let n=0, whiff=0, called=0, hit=0, inplay=0, N=0, W=0, C=0, HI=0, IP=0;
+    for(const k in TABLE.cells){ const c=TABLE.cells[k]; const [pt,z]=k.split('|'); const inZ=Number(z)<=9;
+      const add=(pt===code); N+=c.n; W+=c.whiff; if(inZ) C+=c.called; HI+=c.single+c.double+c.hr; IP+=c.out+c.single+c.double+c.hr;
+      if(add){ n+=c.n; whiff+=c.whiff; if(inZ) called+=c.called; hit+=c.single+c.double+c.hr; inplay+=c.out+c.single+c.double+c.hr; } }
+    const wr=(whiff/n)/(W/N), cr=(called/n)/(C/N), hr=(hit/inplay)/(HI/IP);
+    const tag=(r,hi,lo)=> r>=hi ? '강함' : r<=lo ? '약함' : '보통';
+    const when='헛스윙 <b>'+(whiff/n*100).toFixed(0)+'%</b> <span class="dim">('+tag(wr,1.15,0.85)+' · 리그 '+(W/N*100).toFixed(0)+'%)</span> · 루킹 <b>'+(called/n*100).toFixed(0)+'%</b> <span class="dim">('+tag(cr,1.1,0.9)+')</span><br>'
+      + '<span class="dim">'+(wr>=1.15 ? '2스트라이크 결정구로 좋음' : cr>=1.1 ? '카운트 잡는 공으로 좋음' : '카운트 가리지 않고 무난')+(hr>=1.1?' · 맞으면 안타 잘 남(조심)':hr<=0.9?' · 맞아도 약한 타구':'')+'</span>';
+    // 누구한테: 같은 투수 좌우에서 우타/좌타 비교
+    const pH=lefty?'L':'R';
+    const mR=E.matchupRating(TABLE, code, pH+'R').diff, mL=E.matchupRating(TABLE, code, pH+'L').diff;
+    const d=mR-mL;
+    const who=(Math.abs(d)<0.015) ? '우타·좌타 <b>차이 작음</b>'
+      : (d>0 ? '<b>우타자</b>에게 더 잘 먹음' : '<b>좌타자</b>에게 더 잘 먹음')+' <span class="dim">('+(lefty?'좌투':'우투')+' 기준, 차이 '+(Math.abs(d)*100).toFixed(0)+')</span>';
+    const now=E.matchupRating(TABLE, code, mk);
+    const whoLine=who+'<br><span class="dim">지금 조합('+(lefty?'좌투':'우투')+' vs '+(batLefty?'좌타':'우타')+'): '+(now.label==='유리'?'▲ 유리':now.label==='불리'?'▼ 불리':'= 보통')+'</span>';
+    // 앞 공
+    const pv=E.prevAdvice(TABLE, code, mk);
+    const prev=pv.length ? pv.map(x=>'<b>'+PT_KO[x.prev]+'</b>').join(' · ')+' <span class="dim">다음에 던지면 더 잘 먹음</span>' : '<span class="dim">앞 공에 따른 차이 작음</span>';
+    // 던지는 투수 (팀 목록에서)
+    const who2=[]; for(const t of E.TEAMS) for(const p of t.pitchers) if(p[2].includes(code) && !who2.includes(p[0])) who2.push(p[0]);
+    const pitchers = who2.length ? who2.slice(0,7).join(' · ')+(who2.length>7?' 외':'') : '<span class="dim">—</span>';
+    return row('어디에', where)+row('정석', esc(courseTxt))+row('언제', when)+row('누구에게', whoLine)+row('앞 공', prev)+row('투수', pitchers);
+  }
+
   // 존 앞면 9칸 + 밖 4칸(ㄱ자)에 점수 색. 진한 초록 = 투수에게 좋음, 붉음 = 나쁨. ★ = 최고 칸
   function drawZoneHeat(){
     const h=dexHeat(); if(!h) return;
