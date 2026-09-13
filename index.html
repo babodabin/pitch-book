@@ -139,7 +139,7 @@
   /* ── 한 이닝 게임 ── */
   #page.game #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 게임: 화면 아래까지 */
   #page.game #detail { display:none; }
-  #page.front #canvas-box { height:calc(100vh - 310px); height:calc(100dvh - 310px); min-height:440px; }  /* 타자 시점도 크게 (실전/학습 버튼은 보이게) */
+  #page.front #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 타자 시점도 한 이닝과 같은 크기 */
   #game-bar { display:none; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px; -webkit-overflow-scrolling:touch; }
   #game-bar::-webkit-scrollbar { display:none; }
   #game-hud {
@@ -960,7 +960,7 @@ return {
   };
 
   // 존 폭이 화면의 46% (게임은 존 밖 칸까지 보이게 38%)
-  function ZOOM(){ return view==='game' ? 0.42 : 0.46; }
+  function ZOOM(){ return (view==='game'||view==='front') ? 0.42 : 0.46; }   // 타자 시점·게임: 존 밖까지 보이게
   // ───────── 원근 투영 (타자 시점) ─────────
   // 존 폭이 화면의 46%가 되도록 줌 설정 → 모든 크기가 같은 자로 그려짐
   function proj(X, Y, d){
