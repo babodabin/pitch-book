@@ -1351,7 +1351,7 @@ return {
 
   function drawMitt(){
     const sgn=lefty?-1:1;
-    if(view==='game' && !gameAim) return;      // 게임: 칸을 고르기 전엔 미트 없음
+    if(view==='game'){ drawAimMark(); return; } // 게임: 미트 대신 조준 표시
     const m=proj(cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
     const r=0.125*m.s;
     ctx.save();
@@ -1370,6 +1370,27 @@ return {
     ctx.strokeStyle='rgba(230,200,150,0.35)';
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.arc(m.x,m.y,r*0.85,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── 게임: 노린 점 표시 (점선 링 + 십자) ──
+  function drawAimMark(){
+    if(!gameAim) return;
+    const p=proj(gameAim.x, gameAim.z, 0);
+    const r=Math.max(6, BALL_R_M*p.s*1.6);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,210,59,0.85)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(p.x-r*0.5,p.y); ctx.lineTo(p.x+r*0.5,p.y);
+    ctx.moveTo(p.x,p.y-r*0.5); ctx.lineTo(p.x,p.y+r*0.5);
+    ctx.stroke();
+    ctx.fillStyle='rgba(255,210,59,0.8)';
+    ctx.font='700 10px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText('노림', p.x, p.y-r-4);
     ctx.restore();
   }
 
