@@ -1029,6 +1029,7 @@ return {
     t.addEventListener('click', ()=>{
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
       t.classList.add('on');
+      const wasGame = view==='game';
       view=t.dataset.v;
       const game = view==='game';
       const show = (view==='front'||view==='side'||game) ? 'flex':'none';
@@ -1044,8 +1045,8 @@ return {
       document.querySelector('.d-card.course').style.display = game ? 'none':'block';
       $('page').classList.toggle('game', game);
       resize();
-      if(game){ enterGame(); return; }
-      leaveGame();
+      if(game){ if(!wasGame) enterGame(); return; }
+      if(wasGame) leaveGame();
       doThrow(mode);
     });
   });
@@ -1157,6 +1158,7 @@ return {
     setABS(w.X, w.Y);
   }
   function pushPath(w){
+    if(view==='game' && w.d < -0.3 && path.length && path[path.length-1].d < -0.3) return;
     path.push({X:w.X, Y:w.Y, d:w.d, X0:w.X0, Y0:w.Y0});
     if(!absCross && path.length>1){
       const a=path[path.length-2], b=path[path.length-1];
@@ -1468,7 +1470,7 @@ return {
         const dC=Math.max(last.d,-CAM_BEHIND*0.7);
         const p2=proj(last.X,last.Y,dC);
         const r2=Math.max(2,BALL_R_M*p2.s);
-        drawBallSpin(p2.x,p2.y,r2,t);
+        if(!(view==='game' && last.d<0)) drawBallSpin(p2.x,p2.y,r2,t);
         drawStudyCoachFront(1,last);
       }
       drawABS();
@@ -2462,16 +2464,20 @@ return {
 
   function enterGame(){
     if(view!=='game') return;
-    if(!GAME_PITCHES.some(([,p])=>p===cur) && cur.ax===undefined) dexCur=cur;
+    dexCur=cur;
     mode='real';
     throwT=-1; path=[]; pathDone=false; absCross=null; trail=[];
     if(!TABLE){ showMsg('확률표가 없습니다', 'tools/build.js 를 돌려주세요', '#ff5a5a'); return; }
-    if(!game.inning || game.phase==='over') newGame();
-    else { cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD(); if($('game-msg').innerHTML) $('game-msg').style.display='block'; }
+    if(!game.inning) newGame();
+    else {
+      cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD();
+      if(game.phase==='over') showEnd();
+      else if($('game-msg').innerHTML) $('game-msg').style.display='block';
+    }
   }
   function leaveGame(){
-    if(game.phase==='flying') game.phase='ready';   // 던지는 중에 나가면 그 공은 무효
-    gameAim=null;
+    if(game.phase==='flying'){ game.entered=true; game.contacted=false; game.hit=null; onArrive(); }  // 날아가던 공은 결과만 반영
+    gameAim=null; game.aimZone=null; $('throw-btn').disabled=true;
     cur=dexCur; updateInfo();
     $('game-msg').style.display='none';
     $('game-end').style.display='none';
@@ -2770,7 +2776,6 @@ return {
         // 동점으로 이닝 종료 → 우리 공격(확률) → 다음 이닝 승부치기
         const top=E.nextInning(game.g);
         game.inning=game.g.inn;
-        game.scout=[];
         const n=game.inning.inning;
         text='동점 · '+n+'회로';
         subText=n+'회초 우리 공격 '+(top?top+'점':'무득점')+' → '+game.g.us+':'+game.g.them+' · '+n+'회말 무사 2루';
@@ -2787,6 +2792,7 @@ return {
   }
 
   function showEnd(){
+    if(view!=='game') return;   // 다른 탭이면 돌아올 때 enterGame 이 보여줌
     const g=game.g, inn=game.inning, status=E.gameStatus(g);
     const them=g.them+inn.runs;
     const end=$('game-end');
