@@ -45,27 +45,22 @@ if (mode === 'one') {
   const batter = () => (rng() < LEFT_SHARE ? 'L' : 'R');
 
   function run(label, policyFactory, opts, brief) {
-    let won = 0, pas = 0, pitches = 0;
-    const paCnt = {}, firstRun = {};
+    let won = 0, lost = 0, draw = 0, extra = 0, pas = 0, pitches = 0;
+    const paCnt = {};
     for (let i = 0; i < N; i++) {
-      const r = E.simulateInning(table, 'R', batter, policyFactory(), { rng, ...opts });
-      if (r.won) won++;
+      const r = E.simulateGame(table, 'R', batter, policyFactory(), { rng, ...opts });
+      if (r.result === 'win') won++; else if (r.result === 'lose') lost++; else draw++;
+      if (r.innings > 9) extra++;
       pas += r.pas.length;
       for (const pa of r.pas) { pitches += pa.pitches.length; paCnt[pa.outcome] = (paCnt[pa.outcome] || 0) + 1; }
-      if (!r.won) { const k = r.pas[r.pas.length - 1].outcome; firstRun[k] = (firstRun[k] || 0) + 1; }
     }
-    const lost = N - won;
-    console.log(`  ${label.padEnd(26)} 승률 ${pct(won, N)}   판당 ${(pas / N).toFixed(2)}타석 ${(pitches / N).toFixed(1)}구   볼넷 ${pct(paCnt.walk || 0, pas)} 삼진 ${pct(paCnt.strikeout || 0, pas)} 홈런 ${pct(paCnt.hr || 0, pas)}`);
-    if (!brief) {
-      const ends = Object.entries(firstRun).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${KO[k]} ${pct(v, lost)}`).join(' ');
-      console.log(`  ${''.padEnd(26)} 졌을 때 실점 계기: ${ends}`);
-    }
+    console.log(`  ${label.padEnd(26)} 승 ${pct(won, N)} 패 ${pct(lost, N)} 무 ${pct(draw, N)}  연장 ${pct(extra, N)}  판당 ${(pas / N).toFixed(1)}타석 ${(pitches / N).toFixed(0)}구   볼넷 ${pct(paCnt.walk || 0, pas)} 삼진 ${pct(paCnt.strikeout || 0, pas)} 홈런 ${pct(paCnt.hr || 0, pas)}`);
   }
 
   const seqPolicy = (seq) => () => { let i = 0; return () => { const s = seq[i++ % seq.length]; return { pitchType: s[0], zone: s[1] }; }; };
 
   console.log(`== 정책별 승률 (각 ${N}판, 우투, 시작 ${E.START.outs}사 ${basesStr(E.START.bases)})`);
-  console.log('   기준: 실제 야구에서 1사 1·2루 무실점 확률 ≈ 59%');
+  console.log('   9회말 3:2 1사 1·2루 → 동점이면 연장(승부치기 무사 2루, 12회까지). 9회 무실점 확률 실측 ≈ 59%');
   console.log(`   타자 AI 노림 켜짐 (memory=${E.AI.memory}). 뻔한 정책은 평균보다 훨씬 낮아야 함\n`);
   const policies = [
     ['평균 투수 (실제 빈도, 실투 끔)', () => E.makeUsagePolicy(table, 'RR', rng), { wobble: false }],

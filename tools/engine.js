@@ -211,7 +211,18 @@ const AI = {
   sitFast: 2.5,    // 3볼에서 직구 존 안을 노리는 가중치
   protect: 0.7,    // 2스트라이크에서 노림 강도
   effect: { take: -1.8, whiff: -1.8, foul: -0.5, out: 0.3, single: 1.2, double: 1.8, hr: 2.2 },
+  hit: 1.35,       // 난이도: 안타·장타 확률 배수 (1 = 실측 평균 타자). 헛스윙은 반대로 나눔
 };
+
+function applyDifficulty(p) {
+  const h = AI.hit;
+  if (h === 1) return p;
+  const q = { ...p }; let s = 0;
+  q.single *= h; q.double *= h; q.hr *= h; q.whiff /= h;
+  for (const r of PROB_KEYS) s += q[r];
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
 
 function dist2(a, b) { return (a.x - b.x) ** 2 + (a.z - b.z) ** 2; }
 
@@ -304,6 +315,7 @@ function throwPitch(table, st, pick, opts = {}) {
     const m0 = baselineMatch(pick.pitchType, land.x, land.z);
     p = applyExpectation(p, match, m0, expect.strength || 1);
   }
+  p = applyDifficulty(p);
   let result = sampleResult(p, rng);
   if (result === 'take') {
     const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
@@ -344,11 +356,41 @@ const RUNNER_RULES = {
   sacFly: 0.25,            // 2사 전 아웃 때 3루 주자가 득점할 확률
 };
 
-// 시작 상황: 9회말 3:2 리드, 1사 1·2루 → 무실점으로 3아웃이면 승리
+// 시작 상황: 9회말 3:2 리드, 1사 1·2루. 3아웃까지 리드를 지키면 승리, 역전당하면 패배,
+// 동점으로 끝나면 연장 (10회부터 승부치기: 무사 2루). 12회까지 동점이면 무승부.
 const START = { outs: 1, bases: [true, true, false] }; // [1루, 2루, 3루]
+const EXTRA_START = { outs: 0, bases: [false, true, false] };
+const MAX_INNING = 12;
+const TOP_RUNS = [[0, 0.55], [1, 0.30], [2, 0.15]];   // 연장 초 우리 공격 득점 (승부치기 실측 근처)
 
-function startInning() {
-  return { outs: START.outs, bases: START.bases.slice(), runs: 0 };
+function startInning(inning = 9) {
+  const s = inning >= 10 ? EXTRA_START : START;
+  return { inning, outs: s.outs, bases: s.bases.slice(), runs: 0 };
+}
+
+// 경기 전체: 점수판 + 현재 이닝
+function startGame() {
+  return { us: 3, them: 2, inn: startInning(9), topRuns: null, log: [] };
+}
+// 'playing' | 'win' | 'lose' | 'tied'(이닝 끝, 연장으로) | 'draw'
+function gameStatus(g) {
+  const them = g.them + g.inn.runs;
+  if (them > g.us) return 'lose';
+  if (g.inn.outs >= 3) {
+    if (g.us > them) return 'win';
+    return g.inn.inning >= MAX_INNING ? 'draw' : 'tied';
+  }
+  return 'playing';
+}
+// 동점 이닝을 닫고 다음 이닝으로 (우리 공격은 확률로)
+function nextInning(g, rng = Math.random) {
+  g.them += g.inn.runs;
+  const r = rng();
+  let acc = 0, top = 0;
+  for (const [n, p] of TOP_RUNS) { acc += p; if (r < acc) { top = n; break; } }
+  g.us += top; g.topRuns = top;
+  g.inn = startInning(g.inn.inning + 1);
+  return top;
 }
 
 // 타석 결과 하나를 주자·아웃에 적용. 반환: 이번 타석 실점 (st.runs 에도 누적)
@@ -387,21 +429,33 @@ function applyOutcome(st, outcome, rng = Math.random) {
   return runs;
 }
 
-function inningOver(st) { return st.outs >= 3 || st.runs > 0; }
+function inningOver(st) { return st.outs >= 3; }
 
-// 이닝 하나. batterHands(i) → 'R' | 'L' (i번째 타자), choose(state) → {pitchType, zone}
-function simulateInning(table, pitcherHand, batterHands, choose, opts = {}) {
+// 경기 하나 (연장 포함). batterHands(i) → 'R' | 'L' (i번째 타자, 타순 이어짐), choose(state) → {pitchType, zone}
+// 반환: { result: 'win'|'lose'|'draw', innings, pas, us, them }
+function simulateGame(table, pitcherHand, batterHands, choose, opts = {}) {
   const rng = opts.rng || Math.random;
-  const st = startInning();
+  const g = startGame();
   const pas = [];
   const paOpts = { ...opts, scout: opts.scout || [] };
-  for (let i = 0; !inningOver(st); i++) {
-    const hands = pitcherHand + batterHands(i);
+  let i = 0, status;
+  for (;;) {
+    const hands = pitcherHand + batterHands(i++);
     const pa = simulatePA(table, hands, choose, paOpts);
-    const r = applyOutcome(st, pa.outcome, rng);
-    pas.push({ hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: st.outs, bases: st.bases.slice() });
+    const r = applyOutcome(g.inn, pa.outcome, rng);
+    pas.push({ inning: g.inn.inning, hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: g.inn.outs, bases: g.inn.bases.slice() });
+    status = gameStatus(g);
+    if (status === 'tied') { nextInning(g, rng); continue; }
+    if (status !== 'playing') break;
   }
-  return { won: st.runs === 0, runs: st.runs, pas, outs: st.outs };
+  return { result: status, won: status === 'win', innings: g.inn.inning, pas, us: g.us, them: g.them + g.inn.runs };
+}
+// 예전 이름 (9회만 보는 검증용): 무실점이면 승
+function simulateInning(table, pitcherHand, batterHands, choose, opts = {}) {
+  const r = simulateGame(table, pitcherHand, batterHands, choose, opts);
+  const ninth = r.pas.filter((p) => p.inning === 9);
+  const runs = ninth.reduce((s, p) => s + p.runs, 0);
+  return { won: runs === 0, runs, pas: ninth, outs: ninth.length ? ninth[ninth.length - 1].outs : 0, game: r };
 }
 
 // ---------- 투수 정책 몇 가지 (검증용) ----------
@@ -458,7 +512,8 @@ return {
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
-  RUNNER_RULES, START, startInning, applyOutcome, inningOver, simulateInning,
+  RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
+  applyOutcome, inningOver, simulateGame, simulateInning,
   makeUsagePolicy, fixedPolicy, randomPolicy, mulberry32,
 };
 }));
