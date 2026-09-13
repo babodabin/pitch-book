@@ -2232,25 +2232,6 @@ return {
       ctx.beginPath(); ctx.arc(cx,cy-R*0.18,R*0.60,Math.PI*0.80,Math.PI*0.20,true); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle='#ffd05b'; ctx.font='800 10px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillText('V자로 넓게',cx,cy-R*0.86); ctx.restore();
     }
-    // ── 약지·새끼: 오른쪽 옆에서 공을 감음 ──
-    // 검지·중지 옆(위)에서 같이 내려와 공 옆면을 감아 내려감. 손끝은 아래쪽에서 옆면을 받침
-    function fold(sx,sy,mx,my,tx,ty,w,ang){
-      const S=[cx+sx*R,cy+sy*R], M=[cx+mx*R,cy+my*R], T=[cx+tx*R,cy+ty*R];
-      ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
-      ctx.strokeStyle=SKIN_DK; ctx.lineWidth=R*w*1.22; ctx.beginPath(); ctx.moveTo(S[0],S[1]); ctx.quadraticCurveTo(M[0],M[1],T[0],T[1]); ctx.stroke();
-      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=R*w; ctx.beginPath(); ctx.moveTo(S[0],S[1]); ctx.quadraticCurveTo(M[0],M[1],T[0],T[1]); ctx.stroke();
-      // 관절 주름
-      ctx.strokeStyle='rgba(150,100,78,0.45)'; ctx.lineWidth=1.2;
-      for(const f of [0.35,0.65]){ const jx=(1-f)*(1-f)*S[0]+2*(1-f)*f*M[0]+f*f*T[0], jy=(1-f)*(1-f)*S[1]+2*(1-f)*f*M[1]+f*f*T[1]; ctx.beginPath(); ctx.moveTo(jx-R*w*0.4,jy); ctx.lineTo(jx+R*w*0.4,jy); ctx.stroke(); }
-      ctx.fillStyle=NAIL; ctx.beginPath(); ctx.ellipse(T[0],T[1],R*0.05,R*0.065,ang,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-    // 시작점은 중지 오른쪽 옆(손등 쪽), 공 오른쪽 옆면을 따라 내려와 손끝이 아래에서 받침
-    const fx = (cur.fingers&&cur.fingers.length) ? Math.max(...cur.fingers.map(f=>f[0])) : 0.2;
-    if(type!=='knuckle'){
-      fold(fx+0.28,-1.2,  fx+0.75,-0.35,  0.86,0.30, 0.19, 0.9);     // 약지
-      fold(fx+0.50,-1.15, fx+0.98,-0.05,  0.97,0.62, 0.16, 1.2);     // 새끼 (더 바깥, 아래)
-    }
     // ── 엄지: 왼쪽 아래에서 공 밑을 받침 (앞에 보임) ──
     const th=cur.thumb||[0,0.6];
     if(type!=='circle'){ const X=cx+th[0]*R*0.7-R*0.08, Y=cy+R*0.80;
