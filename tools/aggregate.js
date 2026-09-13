@@ -187,6 +187,10 @@ async function main() {
     byCount[`${b}-${st}|${io}`] = emptyCell();
   const fileStats = [];
   let totalRows = 0, dupes = 0, used = 0;
+  // 앞 공 → 이 공: 같은 타석에서 바로 앞에 던진 구종별로 이 공의 결과를 센다 (타석 단위로 모아뒀다 계산)
+  const paPitches = new Map();   // game_pk|at_bat_number → [{no, pt, result}]
+  const byPrev = {};
+  for (const a of PITCH_TYPES) for (const b of PITCH_TYPES) for (const h of [...HANDS, 'ALL']) byPrev[`${a}|${b}|${h}`] = emptyCell();
 
   for (const file of files) {
     let rows = 0, kept = 0;
@@ -202,6 +206,9 @@ async function main() {
       }
       const c = classify(row);
       if (c.skip) { skipped[c.skip] = (skipped[c.skip] || 0) + 1; return; }
+      const paKey = `${row.game_pk}|${row.at_bat_number}`;
+      if (!paPitches.has(paKey)) paPitches.set(paKey, []);
+      paPitches.get(paKey).push({ no: Number(row.pitch_number), pt: row.pitch_type, result: c.result, hands: row.p_throws + row.stand });
       const key = `${row.pitch_type}|${row.zone}|${row.p_throws}${row.stand}`;
       cells[key].n++;
       cells[key][c.result]++;
@@ -213,6 +220,17 @@ async function main() {
     fileStats.push({ file: path.basename(file), rows, kept, from: ds[0] || '', to: ds[ds.length - 1] || '' });
   }
 
+  for (const list of paPitches.values()) {
+    list.sort((a, b) => a.no - b.no);
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].no !== list[i - 1].no + 1) continue;   // 사이에 제외된 공이 있으면 건너뜀
+      for (const h of [list[i].hands, 'ALL']) {
+        const c = byPrev[`${list[i - 1].pt}|${list[i].pt}|${h}`];
+        c.n++; c[list[i].result]++;
+      }
+    }
+  }
+
   // ---------- 출력 ----------
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -222,6 +240,7 @@ async function main() {
     pitches: used,
     pa_reference: paRef,
     by_count: byCount,
+    by_prev: byPrev,
     key: 'pitch_type|zone|p_throws+stand',
     results: RESULTS,
     pitch_types: PITCH_TYPES,

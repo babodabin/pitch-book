@@ -25,6 +25,7 @@ const data = {
   pitches: json.pitches,
   cells: Object.fromEntries(Object.entries(json.cells).map(([k, c]) => [k, pack(c)])),
   by_count: Object.fromEntries(Object.entries(json.by_count).map(([k, c]) => [k, pack(c)])),
+  by_prev: Object.fromEntries(Object.entries(json.by_prev).map(([k, c]) => [k, pack(c)])),
 };
 
 let html = fs.readFileSync(HTML, 'utf8');

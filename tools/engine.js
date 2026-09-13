@@ -177,7 +177,56 @@ function buildTable(json, priorWeight = PRIOR_WEIGHT) {
       }
     }
   }
-  return { probs, ns, level, cells, countAdj, byCount, pitchTypes: PITCH_TYPES, zones: ZONES, hands: HANDS };
+  // 앞 공 → 이 공 (좌우별은 전체 쌍으로 수축)
+  const byPrev = {};
+  if (json.by_prev) {
+    for (const a of PITCH_TYPES) for (const b of PITCH_TYPES) {
+      const all = takeCounts(cellObj(json.by_prev[`${a}|${b}|ALL`]));
+      const pAll2 = normalize(all, all.n);
+      byPrev[`${a}|${b}|ALL`] = { n: all.n, p: pAll2 };
+      for (const h of HANDS) {
+        const c = takeCounts(cellObj(json.by_prev[`${a}|${b}|${h}`]));
+        byPrev[`${a}|${b}|${h}`] = { n: c.n, nAll: all.n, p: shrink(c, c.n, pAll2, 100) };
+      }
+    }
+  }
+  return { probs, ns, level, cells, countAdj, byCount, byPrev, pitchTypes: PITCH_TYPES, zones: ZONES, hands: HANDS };
+}
+
+// ---------- 도감용: 이 공은 어디가 좋고, 이 조합은 어떤가, 앞에 뭘 던지면 좋나 ----------
+// 투수 점수: 헛스윙·아웃은 +, 안타·장타는 −. 안 휘두른 공은 존 안이면 스트라이크(+), 밖이면 볼(−)
+function pitcherScore(p, takeW) {
+  return p.whiff * 1 + p.foul * 0.4 + p.out * 0.7 + p.take * takeW - p.single * 1.2 - p.double * 2 - p.hr * 3.5;
+}
+function zoneScores(table, pt, hands) {
+  const out = {};
+  for (const z of ZONES) out[z] = pitcherScore(table.probs[`${pt}|${z}|${hands}`], z <= 9 ? 0.6 : -0.5);
+  return out;
+}
+// 이 조합(좌우)에서 이 공이 4조합 평균보다 좋은가: 존 안 9칸 평균 점수 차
+function matchupRating(table, pt, hands) {
+  const mean = (h) => { let s = 0; for (let z = 1; z <= 9; z++) s += pitcherScore(table.probs[`${pt}|${z}|${h}`], 0.6); return s / 9; };
+  const mine = mean(hands);
+  let all = 0; for (const h of HANDS) all += mean(h); all /= 4;
+  const diff = mine - all;
+  return { diff, label: diff > 0.02 ? '유리' : diff < -0.02 ? '불리' : '보통' };
+}
+// 앞에 던지면 이 공이 잘 먹는 구종 (표본 충분한 것만, 평균보다 뚜렷이 나은 것만)
+function prevAdvice(table, pt, hands, minN = 150, minGain = 0.015) {
+  if (!table.byPrev) return [];
+  let base = 0, bn = 0;
+  const rows = [];
+  for (const a of PITCH_TYPES) {
+    const r = table.byPrev[`${a}|${pt}|${hands}`];
+    if (!r || r.nAll < minN) continue;
+    const sc = pitcherScore(r.p, 0.1);
+    rows.push({ prev: a, n: r.n, score: sc });
+    base += sc * r.nAll; bn += r.nAll;
+  }
+  if (!bn) return [];
+  base /= bn;
+  return rows.filter((r) => r.score - base >= minGain).sort((x, y) => y.score - x.score).slice(0, 2)
+    .map((r) => ({ prev: r.prev, gain: r.score - base }));
 }
 
 function sampleResult(p, rng) {
@@ -510,6 +559,7 @@ return {
   PITCH_TYPES, ZONES, HANDS, RESULTS, PROB_KEYS, IN_PLAY, PRIOR_WEIGHT, WOBBLE, WOBBLE_SCALE, ZONE_GEOM,
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
+  pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
