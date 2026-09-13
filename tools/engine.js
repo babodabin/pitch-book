@@ -288,11 +288,16 @@ const BATTER_TYPES = {
 // 타순은 성향에 맞춰 짬. pitchers = [이름, 좌우, 구종 목록] — 구종은 아는 대로 넣은 설계값
 const B = (name, hand, type, pos) => ({ name, hand, type, pos });
 const TEAMS = [
-  { key: 'kbo_all', name: 'KBO 역대 최고', closer: '오승환',
+  { key: 'kbo_all', name: 'KBO 역대 (누적)', closer: '오승환',
     pitchers: [['선동열','R',["FF","SL","CU"]],['최동원','R',["FF","CU","SL"]],['류현진','L',["FF","FC","CH","CU","SI"]],['양현종','L',["FF","SL","CH","CU"]],['오승환','R',["FF","SL","CU"]]], batters: [
     B('이종범','R','contact','유격'), B('정근우','R','contact','2루'), B('양준혁','L','patient','외야'),
     B('이승엽','L','power','1루'), B('이대호','R','power','지명'), B('최정','R','power','3루'),
     B('최형우','L','power','외야'), B('장효조','L','contact','외야'), B('양의지','R','guess','포수') ] },
+  { key: 'kbo_peak', name: 'KBO 역대 (정점)', closer: '오승환',
+    pitchers: [['선동열','R',["FF","SL","CU"]],['최동원','R',["FF","CU","SL"]],['류현진','L',["FF","FC","CH","CU","SI"]],['윤석민','R',["FF","SL","CU","CH"]],['오승환','R',["FF","SL","CU"]]], batters: [
+    B('서건창','L','contact','2루'), B('최형우','L','contact','외야'), B('에릭 테임즈','L','power','1루'),
+    B('이대호','R','power','지명'), B('심정수','R','power','외야'), B('멜 로하스','S','power','외야'),
+    B('김도영','R','power','3루'), B('이만수','R','guess','포수'), B('강정호','R','power','유격') ] },
   { key: 'nc_all', name: 'NC 다이노스 역대', closer: '임창민',
     pitchers: [['에릭 페디','R',["SI","ST","FC","CH","FF"]],['드류 루친스키','R',["SI","FF","SL","CU","CH","FC"]],['구창모','L',["FF","SL","FS","CU"]],['찰리 쉬렉','R',["FF","SI","SL","CH"]],['임창민','R',["FF","SL","FS"]]], batters: [
     B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('나성범','L','power','외야'),
@@ -311,13 +316,13 @@ const TEAMS = [
   { key: 'y2020', name: '2020년대', closer: '정해영',
     pitchers: [['코디 폰세','R',["FF","FS","CU","SL","FC"]],['안우진','R',["FF","SL","CU","CH"]],['원태인','R',["FF","SI","SL","CH","CU"]],['곽빈','R',["FF","SL","CU","CH"]],['정해영','R',["FF","SL","FS"]]], batters: [
     B('김혜성','L','contact','2루'), B('이정후','L','contact','외야'), B('김도영','R','power','3루'),
-    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','지명'),
+    B('오스틴 딘','R','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','지명'),
     B('양의지','R','guess','포수'), B('손아섭','L','contact','외야'), B('오지환','L','average','유격') ] },
   { key: 'y2026', name: '2026 시즌', closer: '곽빈',
     pitchers: [['곽빈','R',["FF","SL","CU","CH"]],['최민석','R',["FF","SL","CH","CU"]]], batters: [
-    B('박찬호','R','aggro','유격'), B('서건창','L','contact','지명'), B('김도영','R','power','외야'),
-    B('르윈 디아즈','L','power','1루'), B('구자욱','L','power','외야'), B('최정','R','power','3루'),
-    B('양의지','R','guess','포수'), B('빅터 레이예스','L','contact','외야'), B('박준순','R','aggro','2루') ] },
+    B('박찬호','R','aggro','유격'), B('구자욱','L','power','외야'), B('김도영','R','power','외야'),
+    B('오스틴 딘','R','power','1루'), B('르윈 디아즈','L','power','지명'), B('최정','R','power','3루'),
+    B('양의지','R','guess','포수'), B('빅터 레이예스','S','contact','외야'), B('박준순','R','aggro','2루') ] },
   { key: 'active', name: '현역 최강', closer: '정해영',
     pitchers: [['곽빈','R',["FF","SL","CU","CH"]],['원태인','R',["FF","SI","SL","CH","CU"]],['류현진','L',["FF","FC","CH","CU","SI"]],['임찬규','R',["FF","SL","CH","CU"]],['정해영','R',["FF","SL","FS"]]], batters: [
     B('박민우','L','contact','2루'), B('손아섭','L','contact','외야'), B('김도영','R','power','3루'),
@@ -325,6 +330,8 @@ const TEAMS = [
     B('양의지','R','guess','포수'), B('최정','R','power','3루'), B('박찬호','R','aggro','유격') ] },
 ];
 const LINEUP = TEAMS[0].batters;
+// 스위치 히터('S')는 투수 반대쪽에 선다
+function batSide(hand, pitcherHand) { return hand === 'S' ? (pitcherHand === 'L' ? 'R' : 'L') : hand; }
 function applyBatter(p, type) {
   const t = BATTER_TYPES[type]; if (!t) return p;
   const q = { ...p }; let s = 0;
@@ -563,7 +570,7 @@ function simulateGame(table, pitcherHand, batterHands, choose, opts = {}) {
   let i = 0, status;
   for (;;) {
     const b = opts.lineup ? opts.lineup[i % opts.lineup.length] : null;
-    const hands = pitcherHand + (b ? b.hand : batterHands(i));
+    const hands = pitcherHand + (b ? batSide(b.hand, pitcherHand) : batterHands(i));
     if (b) paOpts.batter = b.type;
     i++;
     const pa = simulatePA(table, hands, choose, paOpts);
@@ -636,7 +643,7 @@ return {
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
-  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, batSide, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
