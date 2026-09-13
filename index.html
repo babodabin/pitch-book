@@ -943,6 +943,7 @@ return {
   let pathDone=false;   // 도착 완료 후에도 전체 궤적 유지
   let absCross=null;    // ABS 자동 판정 — 존 앞면(플레이트) 통과 지점 {X,Y,strike}
   let cmp=null;         // 옆 뷰 비교 대상 구종 (null=비교 안 함)
+  let dexAim=null;      // 타자 시점에서 고른 위치 {x,z} (null=구종 기본 코스). 존을 누르면 거기로 던짐
 
 
   // 학습 모드는 단순 감속이 아니라 구종의 핵심 변화 구간을 설명한다.
@@ -983,6 +984,7 @@ return {
     c.textContent=p.name.split(' ')[0];
     c.addEventListener('click', ()=>{
       cur=p;
+      dexAim=null;   // 구종 바꾸면 그 구종의 기본 코스로
       document.querySelectorAll('.p-chip').forEach(x=>x.classList.remove('on'));
       c.classList.add('on');
       updateInfo();
@@ -1123,8 +1125,9 @@ return {
     const d=RELEASE_D*(1-tN);
     const ax=2*(p.bx*sgn)/(T*T);
     const ay=2*(p.mv||0)/(T*T) - G;
-    const tgtX = p.ax!==undefined ? p.ax : p.tx;
-    const tgtY = p.ay!==undefined ? p.ay : p.ty;
+    let tgtX = p.ax!==undefined ? p.ax : p.tx;
+    let tgtY = p.ay!==undefined ? p.ay : p.ty;
+    if(view==='front' && dexAim && p===cur){ tgtX=dexAim.x*sgn; tgtY=dexAim.z; }   // sgn 은 아래서 다시 곱함
     const v0x=(tgtX*sgn - relX)/T - 0.5*ax*T;
     const v0y=(tgtY - REL_H)/T - 0.5*ay*T;
 
@@ -1525,7 +1528,7 @@ return {
   function drawMitt(){
     const sgn=lefty?-1:1;
     if(view==='game'){ drawAimMark(); return; } // 게임: 미트 대신 조준 표시
-    const m=proj(cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
+    const m = (view==='front' && dexAim) ? proj(dexAim.x, dexAim.z, 0.55) : proj(cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
     const r=0.125*m.s;
     ctx.save();
     ctx.globalAlpha=0.45;
@@ -1547,9 +1550,9 @@ return {
   }
 
   // ── 게임: 노린 점 표시 (점선 링 + 십자) ──
-  function drawAimMark(){
-    if(!gameAim) return;
-    const p=proj(gameAim.x, gameAim.z, 0);
+  function drawAimMark(){ if(gameAim) drawAimAt(gameAim); }
+  function drawAimAt(pt){
+    const p=proj(pt.x, pt.z, 0);
     const r=Math.max(6, BALL_R_M*p.s*1.6);
     ctx.save();
     ctx.strokeStyle='rgba(255,210,59,0.85)';
@@ -2367,7 +2370,7 @@ return {
 
   function loop(){
     const t=performance.now();
-    if(view==='front') drawFront(t);
+    if(view==='front'){ drawFront(t); drawOuterZones(); if(dexAim) drawAimAt(dexAim); }
     else if(view==='side') drawSide(t);
     else if(view==='game'){ drawFront(t); gameFrame(); }
     else drawGrip();
@@ -2543,6 +2546,15 @@ return {
   }
 
   cv.addEventListener('click', ev=>{
+    if(view==='front'){
+      const r=cv.getBoundingClientRect();
+      const zone=tapToZone(ev.clientX-r.left, ev.clientY-r.top);
+      if(!zone) return;
+      const t=E.zoneTarget(zone);
+      dexAim={x:t.x, z:t.z};
+      doThrow(mode);
+      return;
+    }
     if(view!=='game' || game.phase!=='ready') return;
     const r=cv.getBoundingClientRect();
     const zone=tapToZone(ev.clientX-r.left, ev.clientY-r.top);
