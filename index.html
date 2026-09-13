@@ -177,14 +177,15 @@
   #game-hud .gh-count b.on.s { background:#ff5a5a; border-color:#ff5a5a; }
   #game-hud .gh-bat { color:#aab2c0; font-size:12px; font-weight:600; }
   #game-msg {
-    display:none; margin-bottom:10px; padding:8px 14px; border-radius:12px; min-height:48px;
+    flex:1 1 auto; min-width:0; display:flex; flex-direction:column; justify-content:center;
+    padding:6px 12px; border-radius:12px;
     background:#0d1320; border:1.5px solid #3a4660; color:#fff;
-    font-size:16px; font-weight:800; letter-spacing:0.02em; text-align:center; line-height:1.3;
+    font-size:15px; font-weight:800; letter-spacing:0.02em; text-align:left; line-height:1.25;
   }
-  #game-msg small { display:block; font-size:11px; font-weight:600; color:#8a93a3; letter-spacing:0; }
-  #game-controls { display:none; padding:12px 16px 8px 16px; }
+  #game-msg small { display:block; font-size:10.5px; font-weight:600; color:#8a93a3; letter-spacing:0; margin-top:2px; }
+  #game-controls { display:none; gap:10px; padding:12px 16px 8px 16px; align-items:stretch; }   /* 도감 실전/학습 줄과 같은 높이 */
   #throw-btn {
-    width:100%; font-size:18px; font-weight:800; letter-spacing:0.06em;
+    flex:0 0 118px; font-size:17px; font-weight:800; letter-spacing:0.06em;
     padding:15px 0; border-radius:13px; border:none;
     background:#fff; color:#000;
   }
@@ -1259,7 +1260,7 @@ return {
       $('pitch-bar').style.display = game ? 'none':'flex';
       $('game-bar').style.display = game ? 'flex':'none';
       $('game-hud').style.display = game ? 'block':'none';
-      $('game-controls').style.display = game ? 'block':'none';
+      $('game-controls').style.display = game ? 'flex':'none';
       document.querySelector('.d-card.course').style.display = game ? 'none':'block';
       $('page').classList.toggle('game', game);
       $('page').classList.toggle('front', view==='front');
@@ -2626,7 +2627,7 @@ return {
     $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':b.hand==='S'?'스':'우')+'</small>').join(' · ');
   }
   function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; }
-  function hideSetup(){ $('game-setup').style.display='none'; $('game-controls').style.display='block'; }
+  function hideSetup(){ $('game-setup').style.display='none'; $('game-controls').style.display='flex'; }
   $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); newGame(); });
 
   const RESULT_TXT={
@@ -2689,7 +2690,7 @@ return {
     else {
       cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD();
       if(game.phase==='over') showEnd();
-      else if($('game-msg').innerHTML) $('game-msg').style.display='block';
+      else if($('game-msg').innerHTML) $('game-msg').style.display='flex';
     }
   }
   function leaveGame(){
@@ -2727,7 +2728,7 @@ return {
     m.innerHTML=main+(sub?'<small>'+sub+'</small>':'');
     m.style.borderColor=col||'#3a4660';
     m.style.color=col||'#fff';
-    m.style.display='block';
+    m.style.display='flex';
   }
 
   function updateHUD(){
@@ -2797,7 +2798,6 @@ return {
     game.aimZone=null;
     $('throw-btn').disabled=true;
     game.entry=null; game.entered=false; game.contacted=false; game.hit=null; game.swingEnd=false;
-    $('game-msg').style.display='none';
     doThrow('real');
     game.t0=throwT;
     // 앞면(투수 쪽) 통과점 — 배트가 맞히는 평면
