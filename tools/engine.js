@@ -186,6 +186,96 @@ function sampleResult(p, rng) {
   return PROB_KEYS[PROB_KEYS.length - 1];
 }
 
+// ---------- 타자 AI: 노림 ----------
+// 타자는 매 구 "어느 계열의 공이 어느 칸으로 올지" 하나를 찍고 기다린다.
+//   · 카운트: 3볼(2S 아님)이면 직구 존 안을 노림. 2스트라이크면 넓게 지킴(노림이 약해짐)
+//   · 기억: 이 이닝에 투수가 던진 공을 최근 것일수록 무겁게 기억해 그쪽을 노림
+// 실제 공이 노림과 얼마나 맞는지(match 0~1)에 따라 결과 확률을 곱해서 바꾼다.
+//   맞으면 헛스윙↓ 안타·장타↑, 빗나가면 헛스윙↑ 약한 타구↑.
+//   노림이 무작위일 때의 평균 match(m0)를 기준으로 하므로, 읽히지 않는 투수는 실측 그대로다.
+const GROUP = { FF: 'fast', SI: 'fast', FC: 'fast', SL: 'break', ST: 'break', CU: 'break', KC: 'break', SV: 'break', CH: 'off', FS: 'off' };
+const GROUPS = ['fast', 'break', 'off'];
+const GROUP_KO = { fast: '빠른 공', break: '변화구', off: '느린 공' };
+const TYPE_MATCH = {
+  'fast|fast': 1, 'break|break': 1, 'off|off': 1,
+  'fast|break': 0.3, 'break|fast': 0.3, 'fast|off': 0.15, 'off|fast': 0.15, 'break|off': 0.5, 'off|break': 0.5,
+};
+const AI = {
+  memory: 0.7,     // 볼배합 기억 감도 (0 = 기억 없음)
+  pattern: 3.0,    // "저 공 다음엔 이 공" 패턴 기억 감도
+  decay: 0.7,      // 한 구 전으로 갈수록 곱해지는 가중치
+  spread: 0.15,    // 기억한 칸이 이웃 칸으로 번지는 폭 (m)
+  focus: 2,        // 노림 뽑기의 집중도 (가중치의 거듭제곱. 클수록 제일 유력한 것에 몰림)
+  sigma: 0.22,     // 노린 위치와 실제 위치의 일치 폭 (m)
+  base: 0.06,      // 아무 기억이 없을 때 각 (계열, 칸)의 기본 가중치
+  sitFast: 2.5,    // 3볼에서 직구 존 안을 노리는 가중치
+  protect: 0.7,    // 2스트라이크에서 노림 강도
+  effect: { take: -1.8, whiff: -1.8, foul: -0.5, out: 0.3, single: 1.2, double: 1.8, hr: 2.2 },
+};
+
+function dist2(a, b) { return (a.x - b.x) ** 2 + (a.z - b.z) ** 2; }
+
+// scout: 이 이닝에 투수가 던진 공들 [{pitchType, zone}] (오래된 것부터)
+function chooseExpectation(scout, balls, strikes, rng) {
+  const cells = ZONES.map((z) => ({ zone: z, pt: zoneTarget(z) }));
+  const w = {};
+  for (const g of GROUPS) for (const c of cells) w[g + '|' + c.zone] = AI.base;
+  const kern = (a, b) => Math.exp(-dist2(a, b) / (2 * AI.spread * AI.spread));
+  const add = (s, wt) => {
+    if (wt < 0.01) return;
+    const g = GROUP[s.pitchType], spt = zoneTarget(s.zone);
+    for (const c of cells) w[g + '|' + c.zone] += wt * kern(spt, c.pt);
+  };
+  const n = scout.length;
+  // 기억 1: 최근에 던진 공 (최근일수록 무겁게)
+  for (let i = 0; i < n; i++) add(scout[i], AI.memory * Math.pow(AI.decay, n - 1 - i));
+  // 기억 2: 패턴 — 직전 공과 비슷한 공 뒤에 뭐가 왔었나
+  if (n >= 2) {
+    const last = scout[n - 1], lpt = zoneTarget(last.zone);
+    for (let i = 0; i < n - 1; i++) {
+      const prev = scout[i];
+      if (GROUP[prev.pitchType] !== GROUP[last.pitchType]) continue;
+      const sim = kern(zoneTarget(prev.zone), lpt);
+      add(scout[i + 1], AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
+    }
+  }
+  // 카운트
+  let strength = 1;
+  if (balls === 3 && strikes < 2) for (const z of [2, 4, 5, 6, 8]) w['fast|' + z] += AI.sitFast;
+  if (strikes === 2) strength = AI.protect;
+  // 뽑기 (focus 로 유력한 쪽에 몰아줌)
+  const keys = Object.keys(w);
+  let tot = 0; for (const k of keys) { w[k] = Math.pow(w[k], AI.focus); tot += w[k]; }
+  let r = rng() * tot, pick = keys[keys.length - 1];
+  for (const k of keys) { r -= w[k]; if (r < 0) { pick = k; break; } }
+  const [group, zs] = pick.split('|');
+  const zone = Number(zs), pt = zoneTarget(zone);
+  return { group, zone, x: pt.x, z: pt.z, strength };
+}
+
+function matchScore(expect, pitchType, x, z) {
+  const tm = TYPE_MATCH[expect.group + '|' + GROUP[pitchType]];
+  const d2 = (x - expect.x) ** 2 + (z - expect.z) ** 2;
+  return tm * Math.exp(-d2 / (2 * AI.sigma * AI.sigma));
+}
+
+// 노림이 무작위였을 때의 평균 match — 이 값이 기준선
+function baselineMatch(pitchType, x, z) {
+  let s = 0, n = 0;
+  for (const g of GROUPS) for (const zone of ZONES) {
+    const pt = zoneTarget(zone);
+    s += matchScore({ group: g, x: pt.x, z: pt.z }, pitchType, x, z); n++;
+  }
+  return s / n;
+}
+
+function applyExpectation(p, m, m0, strength) {
+  const q = {}; let s = 0;
+  for (const r of PROB_KEYS) { q[r] = p[r] * Math.exp(AI.effect[r] * strength * (m - m0)); s += q[r]; }
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 // ---------- 타석 (투구 하나씩) ----------
 function startPA(hands) {
   return { balls: 0, strikes: 0, hands, history: [], outcome: null };
@@ -194,7 +284,8 @@ function startPA(hands) {
 // 투구 하나. pick = { pitchType, zone }
 // 옵션: wobble (기본 true), wobbleScale, countAdjust (기본 true), rng,
 //       judge(x, z) → true=스트라이크 : 안 휘두른 공의 볼/루킹을 가르는 판정 (도감 ABS를 넘겨줌)
-// 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome }  outcome 은 타석이 끝났을 때만
+//       ai (기본 true) 타자 노림 켜기, scout: 이 이닝의 투구 기록 배열 (넘기면 여기에 쌓임), expect: 노림을 직접 지정
+// 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome, expect, match, swung }  outcome 은 타석이 끝났을 때만
 function throwPitch(table, st, pick, opts = {}) {
   const rng = opts.rng || Math.random;
   const wobble = opts.wobble !== false;
@@ -206,6 +297,13 @@ function throwPitch(table, st, pick, opts = {}) {
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
+  let expect = null, match = null;
+  if (opts.ai !== false) {
+    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng);
+    match = matchScore(expect, pick.pitchType, land.x, land.z);
+    const m0 = baselineMatch(pick.pitchType, land.x, land.z);
+    p = applyExpectation(p, match, m0, expect.strength || 1);
+  }
   let result = sampleResult(p, rng);
   if (result === 'take') {
     const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
@@ -213,7 +311,8 @@ function throwPitch(table, st, pick, opts = {}) {
   }
 
   const rec = { pitchType: pick.pitchType, aim: pick.zone, zone: land.zone, x: land.x, z: land.z,
-                result, count: `${st.balls}-${st.strikes}`, outcome: null };
+                result, count: `${st.balls}-${st.strikes}`, outcome: null,
+                expect, match, swung: result !== 'ball' && result !== 'called' };
 
   if (IN_PLAY.has(result)) rec.outcome = result;
   else if (result === 'ball') { st.balls++; if (st.balls === 4) rec.outcome = 'walk'; }
@@ -221,6 +320,7 @@ function throwPitch(table, st, pick, opts = {}) {
   else { st.strikes++; if (st.strikes === 3) rec.outcome = 'strikeout'; }
 
   st.history.push(rec);
+  if (opts.scout) opts.scout.push(rec);
   if (rec.outcome) st.outcome = rec.outcome;
   return rec;
 }
@@ -228,6 +328,7 @@ function throwPitch(table, st, pick, opts = {}) {
 // 타석 하나를 끝까지. choose(state) → { pitchType, zone }
 function simulatePA(table, hands, choose, opts = {}) {
   const st = startPA(hands);
+  if (opts.ai !== false && !opts.scout) opts = { ...opts, scout: [] };
   for (let i = 0; i < 30; i++) {
     const rec = throwPitch(table, st, choose(st), opts);
     if (rec.outcome) return { outcome: rec.outcome, pitches: st.history };
@@ -293,9 +394,10 @@ function simulateInning(table, pitcherHand, batterHands, choose, opts = {}) {
   const rng = opts.rng || Math.random;
   const st = startInning();
   const pas = [];
+  const paOpts = { ...opts, scout: opts.scout || [] };
   for (let i = 0; !inningOver(st); i++) {
     const hands = pitcherHand + batterHands(i);
-    const pa = simulatePA(table, hands, choose, opts);
+    const pa = simulatePA(table, hands, choose, paOpts);
     const r = applyOutcome(st, pa.outcome, rng);
     pas.push({ hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: st.outs, bases: st.bases.slice() });
   }
@@ -354,6 +456,7 @@ return {
   PITCH_TYPES, ZONES, HANDS, RESULTS, PROB_KEYS, IN_PLAY, PRIOR_WEIGHT, WOBBLE, WOBBLE_SCALE, ZONE_GEOM,
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
+  GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, startInning, applyOutcome, inningOver, simulateInning,
   makeUsagePolicy, fixedPolicy, randomPolicy, mulberry32,

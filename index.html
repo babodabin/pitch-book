@@ -137,7 +137,8 @@
   .d-card.course .lb { color:#ff9a3d; }
 
   /* ── 한 이닝 게임 ── */
-  #page.game #canvas-box { height:60vh; }   /* 게임: 존 밖 아래 칸까지 보이게 조금 더 높게 */
+  #page.game #canvas-box { height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:440px; }  /* 게임: 화면 아래까지 */
+  #page.game #detail { display:none; }
   #game-bar { display:none; gap:8px; overflow-x:auto; padding:4px 16px 10px 16px; -webkit-overflow-scrolling:touch; }
   #game-bar::-webkit-scrollbar { display:none; }
   #game-hud {
@@ -164,7 +165,7 @@
   #game-hud .gh-count b.on.s { background:#ff5a5a; border-color:#ff5a5a; }
   #game-hud .gh-bat { color:#aab2c0; font-size:12px; font-weight:600; }
   #game-msg {
-    display:none; position:absolute; right:10px; top:56px; max-width:60%; white-space:nowrap;
+    display:none; position:absolute; left:10px; right:10px; top:122px;
     padding:8px 14px; border-radius:12px;
     background:rgba(8,13,24,0.90); border:1.5px solid #3a4660; color:#fff;
     font-size:16px; font-weight:800; letter-spacing:0.02em; text-align:center; line-height:1.3;
@@ -432,6 +433,96 @@ function sampleResult(p, rng) {
   return PROB_KEYS[PROB_KEYS.length - 1];
 }
 
+// ---------- 타자 AI: 노림 ----------
+// 타자는 매 구 "어느 계열의 공이 어느 칸으로 올지" 하나를 찍고 기다린다.
+//   · 카운트: 3볼(2S 아님)이면 직구 존 안을 노림. 2스트라이크면 넓게 지킴(노림이 약해짐)
+//   · 기억: 이 이닝에 투수가 던진 공을 최근 것일수록 무겁게 기억해 그쪽을 노림
+// 실제 공이 노림과 얼마나 맞는지(match 0~1)에 따라 결과 확률을 곱해서 바꾼다.
+//   맞으면 헛스윙↓ 안타·장타↑, 빗나가면 헛스윙↑ 약한 타구↑.
+//   노림이 무작위일 때의 평균 match(m0)를 기준으로 하므로, 읽히지 않는 투수는 실측 그대로다.
+const GROUP = { FF: 'fast', SI: 'fast', FC: 'fast', SL: 'break', ST: 'break', CU: 'break', KC: 'break', SV: 'break', CH: 'off', FS: 'off' };
+const GROUPS = ['fast', 'break', 'off'];
+const GROUP_KO = { fast: '빠른 공', break: '변화구', off: '느린 공' };
+const TYPE_MATCH = {
+  'fast|fast': 1, 'break|break': 1, 'off|off': 1,
+  'fast|break': 0.3, 'break|fast': 0.3, 'fast|off': 0.15, 'off|fast': 0.15, 'break|off': 0.5, 'off|break': 0.5,
+};
+const AI = {
+  memory: 0.7,     // 볼배합 기억 감도 (0 = 기억 없음)
+  pattern: 3.0,    // "저 공 다음엔 이 공" 패턴 기억 감도
+  decay: 0.7,      // 한 구 전으로 갈수록 곱해지는 가중치
+  spread: 0.15,    // 기억한 칸이 이웃 칸으로 번지는 폭 (m)
+  focus: 2,        // 노림 뽑기의 집중도 (가중치의 거듭제곱. 클수록 제일 유력한 것에 몰림)
+  sigma: 0.22,     // 노린 위치와 실제 위치의 일치 폭 (m)
+  base: 0.06,      // 아무 기억이 없을 때 각 (계열, 칸)의 기본 가중치
+  sitFast: 2.5,    // 3볼에서 직구 존 안을 노리는 가중치
+  protect: 0.7,    // 2스트라이크에서 노림 강도
+  effect: { take: -1.8, whiff: -1.8, foul: -0.5, out: 0.3, single: 1.2, double: 1.8, hr: 2.2 },
+};
+
+function dist2(a, b) { return (a.x - b.x) ** 2 + (a.z - b.z) ** 2; }
+
+// scout: 이 이닝에 투수가 던진 공들 [{pitchType, zone}] (오래된 것부터)
+function chooseExpectation(scout, balls, strikes, rng) {
+  const cells = ZONES.map((z) => ({ zone: z, pt: zoneTarget(z) }));
+  const w = {};
+  for (const g of GROUPS) for (const c of cells) w[g + '|' + c.zone] = AI.base;
+  const kern = (a, b) => Math.exp(-dist2(a, b) / (2 * AI.spread * AI.spread));
+  const add = (s, wt) => {
+    if (wt < 0.01) return;
+    const g = GROUP[s.pitchType], spt = zoneTarget(s.zone);
+    for (const c of cells) w[g + '|' + c.zone] += wt * kern(spt, c.pt);
+  };
+  const n = scout.length;
+  // 기억 1: 최근에 던진 공 (최근일수록 무겁게)
+  for (let i = 0; i < n; i++) add(scout[i], AI.memory * Math.pow(AI.decay, n - 1 - i));
+  // 기억 2: 패턴 — 직전 공과 비슷한 공 뒤에 뭐가 왔었나
+  if (n >= 2) {
+    const last = scout[n - 1], lpt = zoneTarget(last.zone);
+    for (let i = 0; i < n - 1; i++) {
+      const prev = scout[i];
+      if (GROUP[prev.pitchType] !== GROUP[last.pitchType]) continue;
+      const sim = kern(zoneTarget(prev.zone), lpt);
+      add(scout[i + 1], AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
+    }
+  }
+  // 카운트
+  let strength = 1;
+  if (balls === 3 && strikes < 2) for (const z of [2, 4, 5, 6, 8]) w['fast|' + z] += AI.sitFast;
+  if (strikes === 2) strength = AI.protect;
+  // 뽑기 (focus 로 유력한 쪽에 몰아줌)
+  const keys = Object.keys(w);
+  let tot = 0; for (const k of keys) { w[k] = Math.pow(w[k], AI.focus); tot += w[k]; }
+  let r = rng() * tot, pick = keys[keys.length - 1];
+  for (const k of keys) { r -= w[k]; if (r < 0) { pick = k; break; } }
+  const [group, zs] = pick.split('|');
+  const zone = Number(zs), pt = zoneTarget(zone);
+  return { group, zone, x: pt.x, z: pt.z, strength };
+}
+
+function matchScore(expect, pitchType, x, z) {
+  const tm = TYPE_MATCH[expect.group + '|' + GROUP[pitchType]];
+  const d2 = (x - expect.x) ** 2 + (z - expect.z) ** 2;
+  return tm * Math.exp(-d2 / (2 * AI.sigma * AI.sigma));
+}
+
+// 노림이 무작위였을 때의 평균 match — 이 값이 기준선
+function baselineMatch(pitchType, x, z) {
+  let s = 0, n = 0;
+  for (const g of GROUPS) for (const zone of ZONES) {
+    const pt = zoneTarget(zone);
+    s += matchScore({ group: g, x: pt.x, z: pt.z }, pitchType, x, z); n++;
+  }
+  return s / n;
+}
+
+function applyExpectation(p, m, m0, strength) {
+  const q = {}; let s = 0;
+  for (const r of PROB_KEYS) { q[r] = p[r] * Math.exp(AI.effect[r] * strength * (m - m0)); s += q[r]; }
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 // ---------- 타석 (투구 하나씩) ----------
 function startPA(hands) {
   return { balls: 0, strikes: 0, hands, history: [], outcome: null };
@@ -440,7 +531,8 @@ function startPA(hands) {
 // 투구 하나. pick = { pitchType, zone }
 // 옵션: wobble (기본 true), wobbleScale, countAdjust (기본 true), rng,
 //       judge(x, z) → true=스트라이크 : 안 휘두른 공의 볼/루킹을 가르는 판정 (도감 ABS를 넘겨줌)
-// 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome }  outcome 은 타석이 끝났을 때만
+//       ai (기본 true) 타자 노림 켜기, scout: 이 이닝의 투구 기록 배열 (넘기면 여기에 쌓임), expect: 노림을 직접 지정
+// 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome, expect, match, swung }  outcome 은 타석이 끝났을 때만
 function throwPitch(table, st, pick, opts = {}) {
   const rng = opts.rng || Math.random;
   const wobble = opts.wobble !== false;
@@ -452,6 +544,13 @@ function throwPitch(table, st, pick, opts = {}) {
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
+  let expect = null, match = null;
+  if (opts.ai !== false) {
+    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng);
+    match = matchScore(expect, pick.pitchType, land.x, land.z);
+    const m0 = baselineMatch(pick.pitchType, land.x, land.z);
+    p = applyExpectation(p, match, m0, expect.strength || 1);
+  }
   let result = sampleResult(p, rng);
   if (result === 'take') {
     const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
@@ -459,7 +558,8 @@ function throwPitch(table, st, pick, opts = {}) {
   }
 
   const rec = { pitchType: pick.pitchType, aim: pick.zone, zone: land.zone, x: land.x, z: land.z,
-                result, count: `${st.balls}-${st.strikes}`, outcome: null };
+                result, count: `${st.balls}-${st.strikes}`, outcome: null,
+                expect, match, swung: result !== 'ball' && result !== 'called' };
 
   if (IN_PLAY.has(result)) rec.outcome = result;
   else if (result === 'ball') { st.balls++; if (st.balls === 4) rec.outcome = 'walk'; }
@@ -467,6 +567,7 @@ function throwPitch(table, st, pick, opts = {}) {
   else { st.strikes++; if (st.strikes === 3) rec.outcome = 'strikeout'; }
 
   st.history.push(rec);
+  if (opts.scout) opts.scout.push(rec);
   if (rec.outcome) st.outcome = rec.outcome;
   return rec;
 }
@@ -474,6 +575,7 @@ function throwPitch(table, st, pick, opts = {}) {
 // 타석 하나를 끝까지. choose(state) → { pitchType, zone }
 function simulatePA(table, hands, choose, opts = {}) {
   const st = startPA(hands);
+  if (opts.ai !== false && !opts.scout) opts = { ...opts, scout: [] };
   for (let i = 0; i < 30; i++) {
     const rec = throwPitch(table, st, choose(st), opts);
     if (rec.outcome) return { outcome: rec.outcome, pitches: st.history };
@@ -539,9 +641,10 @@ function simulateInning(table, pitcherHand, batterHands, choose, opts = {}) {
   const rng = opts.rng || Math.random;
   const st = startInning();
   const pas = [];
+  const paOpts = { ...opts, scout: opts.scout || [] };
   for (let i = 0; !inningOver(st); i++) {
     const hands = pitcherHand + batterHands(i);
-    const pa = simulatePA(table, hands, choose, opts);
+    const pa = simulatePA(table, hands, choose, paOpts);
     const r = applyOutcome(st, pa.outcome, rng);
     pas.push({ hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: st.outs, bases: st.bases.slice() });
   }
@@ -600,6 +703,7 @@ return {
   PITCH_TYPES, ZONES, HANDS, RESULTS, PROB_KEYS, IN_PLAY, PRIOR_WEIGHT, WOBBLE, WOBBLE_SCALE, ZONE_GEOM,
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
+  GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, startInning, applyOutcome, inningOver, simulateInning,
   makeUsagePolicy, fixedPolicy, randomPolicy, mulberry32,
@@ -791,7 +895,7 @@ return {
   };
 
   // 존 폭이 화면의 46% (게임은 존 밖 칸까지 보이게 38%)
-  function ZOOM(){ return view==='game' ? 0.38 : 0.46; }
+  function ZOOM(){ return view==='game' ? 0.42 : 0.46; }
   // ───────── 원근 투영 (타자 시점) ─────────
   // 존 폭이 화면의 46%가 되도록 줌 설정 → 모든 크기가 같은 자로 그려짐
   function proj(X, Y, d){
@@ -1247,7 +1351,7 @@ return {
       ctx.fillStyle='rgba(255,255,255,0.30)';
       ctx.font='10px -apple-system,sans-serif';
       ctx.textAlign='left';
-      ctx.fillText('- - 회전 없었다면 (중력만)', 10, H-16);
+      if(view!=='game') ctx.fillText('- - 회전 없었다면 (중력만)', 10, H-16);
       ctx.restore();
       // 1) 지면 그림자 궤적 (입체감 — 공이 공중에 떠 있음을 바닥선으로)
       ctx.save();
@@ -2255,7 +2359,15 @@ return {
   let dexCur=cur;            // 도감에서 보고 있던 구종 (게임 나가면 복구)
   let gamePitch='FF';        // 고른 구종 코드
   let gameAim=null;          // 노린 점 {x,z} (미트 위치)
-  const game={ phase:'idle', inning:null, batterIdx:0, pa:null, rec:null, endTimer:0 };
+  const game={ phase:'idle', inning:null, batterIdx:0, pa:null, rec:null, endTimer:0,
+    scout:[],        // 이 이닝에 던진 공 (타자 AI 기억)
+    t0:0,            // 던진 시각 (throwT 복사본 — 얼어붙여도 스윙 타이밍은 이걸로)
+    entry:null,      // 앞면(투수 쪽, d=0.43) 통과점 {X,Y}
+    entered:false,   // 앞면을 지났나
+    contacted:false, // 배트에 맞았나 (파울·인플레이)
+    hit:null,        // 맞은 공 날아가기 {t0, x,z,d, vx,vz,vd}
+    swingEnd:false };
+  const PLATE_D=0.43;  // 존 상자 깊이 = 앞면(투수 쪽)까지의 거리
 
   // ── 게임 구종 칩 ──
   const gbar=$('game-bar');
@@ -2302,9 +2414,10 @@ return {
 
   function newGame(){
     game.inning=E.startInning();
+    game.scout=[];
     game.batterIdx=0;
     game.pa=E.startPA(curHands());
-    game.rec=null;
+    game.rec=null; game.hit=null; game.entry=null; game.contacted=false; game.entered=false;
     game.phase='ready';
     gameAim=null;
     throwT=-1; path=[]; pathDone=false; absCross=null;
@@ -2361,22 +2474,167 @@ return {
   function throwGamePitch(zone){
     const base=GAME_PITCH_MAP[gamePitch];
     game.pa.hands=curHands();
-    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge});
+    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge, scout:game.scout});
     const sgn=lefty?-1:1;
     const aim=E.zoneTarget(zone);
     gameAim={x:aim.x, z:aim.z};
-    // 노림(tx/ty)은 미트 위치, 실제 도달(ax/ay)은 실투가 반영된 점. sgn 은 ballWorldFor 가 다시 곱하므로 미리 나눔
+    // 노림(tx/ty)은 조준 표시, 실제 도달(ax/ay)은 실투가 반영된 점. sgn 은 ballWorldFor 가 다시 곱하므로 미리 나눔
     cur=Object.assign({}, base, {tx:aim.x*sgn, ty:aim.z, ax:rec.x*sgn, ay:rec.z});
-    game.rec=rec;
+    game.rec=rec; rec.side = batLefty ? 1 : -1;
     game.phase='flying';
+    game.entry=null; game.entered=false; game.contacted=false; game.hit=null; game.swingEnd=false;
     $('game-msg').style.display='none';
     doThrow('real');
+    game.t0=throwT;
+    // 앞면(투수 쪽) 통과점 — 배트가 맞히는 평면
+    const w=ballWorldFor(cur, 1-PLATE_D/RELEASE_D, knSeed);
+    game.entry={X:w.X, Y:w.Y};
   }
 
-  // 매 프레임: 공이 도착했으면 결과 처리. 던지기 전엔 존 밖 4칸 안내선
+  // 스윙 진행: raw(비행 진행률) 0.74~1.19 사이. 앞면 통과(raw≈0.975)에서 배트가 플레이트를 가로지름
+  const SW0=0.74, SW1=1.19, RAW_ENTRY=1-PLATE_D/RELEASE_D;
+  function swingTheta(raw){
+    const u=Math.min(1,Math.max(0,(raw-SW0)/(SW1-SW0)));
+    const e=u*u*(3-2*u);
+    return (10+150*e)*Math.PI/180;
+  }
+  function flightRaw(){ return (performance.now()-game.t0)/flightDur(); }
+
+  // 매 프레임 (drawFront 뒤에 호출)
   function gameFrame(){
-    if(game.phase==='flying' && pathDone) onArrive();
+    const rec=game.rec;
     if(game.phase==='ready' || game.phase==='flying') drawOuterZones();
+    drawFarGrid();
+    if(game.phase==='flying' && rec){
+      const raw=flightRaw();
+      if(!game.entered && raw>=RAW_ENTRY) game.entered=true;
+      const contactResult = rec.swung && rec.result!=='whiff';
+      if(contactResult && !game.contacted && raw>=RAW_ENTRY){
+        // 배트에 맞음: 비행을 앞면에서 멈추고(궤적은 남김) 타구를 띄운다
+        game.contacted=true;
+        const wE=ballWorldFor(cur, RAW_ENTRY, knSeed);
+        if(!path.length || path[path.length-1].d>PLATE_D+0.01) pushPath(wE);
+        pathDone=true; throwT=-1;
+        absCross=null;
+        startHit(rec.result);
+        onArrive();
+      } else if(!contactResult && pathDone){
+        onArrive();
+      }
+    }
+    if(rec){
+      if(game.entered) drawEntryMark(rec);
+      if(game.phase!=='flying' || flightRaw()>=SW0) drawExpectMark(rec);
+      if(rec.swung && (game.phase!=='flying' || flightRaw()>=SW0)) drawBat(rec);
+      if(game.hit) drawHit();
+    }
+  }
+
+  // 앞면(투수 쪽)에도 9분할 — 배트가 찍히는 면
+  function drawFarGrid(){
+    const P=(x,y)=>proj(x,y,PLATE_D);
+    const lerp=(a,b,t)=>({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t});
+    const TL=P(-ZONE_W/2,ZONE_TOP), TR=P(ZONE_W/2,ZONE_TOP), BL=P(-ZONE_W/2,ZONE_BOT), BR=P(ZONE_W/2,ZONE_BOT);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.09)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(const t of [1/3,2/3]){
+      const tp=lerp(TL,TR,t), bp=lerp(BL,BR,t); ctx.moveTo(tp.x,tp.y); ctx.lineTo(bp.x,bp.y);
+      const lp=lerp(TL,BL,t), rp=lerp(TR,BR,t); ctx.moveTo(lp.x,lp.y); ctx.lineTo(rp.x,rp.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 앞면 통과점: 들어온 칸 초록 칠 + 링. (뒷면 도달점은 도감 ABS 마커가 그림)
+  function drawEntryMark(rec){
+    const e=game.entry; if(!e) return;
+    const inZone = Math.abs(e.X)<=ZONE_W/2 && e.Y>=ZONE_BOT && e.Y<=ZONE_TOP;
+    ctx.save();
+    if(inZone){
+      const cw=ZONE_W/3, chh=(ZONE_TOP-ZONE_BOT)/3;
+      const ci=Math.min(2,Math.max(0,Math.floor((e.X+ZONE_W/2)/cw)));
+      const ri=Math.min(2,Math.max(0,Math.floor((ZONE_TOP-e.Y)/chh)));
+      const x0=-ZONE_W/2+ci*cw, y1=ZONE_TOP-ri*chh, y0=y1-chh;
+      const A=proj(x0,y1,PLATE_D), B=proj(x0+cw,y1,PLATE_D), C=proj(x0+cw,y0,PLATE_D), D=proj(x0,y0,PLATE_D);
+      ctx.fillStyle='rgba(82,224,122,0.13)';
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.lineTo(C.x,C.y); ctx.lineTo(D.x,D.y); ctx.closePath(); ctx.fill();
+    }
+    const p=proj(e.X,e.Y,PLATE_D);
+    const r=Math.max(3,BALL_R_M*p.s);
+    ctx.strokeStyle=inZone?'rgba(82,224,122,0.8)':'rgba(255,90,90,0.8)';
+    ctx.lineWidth=1.5; ctx.setLineDash([2,3]);
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // 타자가 노린 곳 — 갈색 반투명 표시 (던지고 난 뒤에만)
+  function drawExpectMark(rec){
+    const ex=rec.expect; if(!ex) return;
+    const p=proj(ex.x,ex.z,PLATE_D);
+    const r=Math.max(8,BALL_R_M*p.s*2.2);
+    ctx.save();
+    ctx.fillStyle='rgba(150,100,55,0.28)';
+    ctx.strokeStyle='rgba(190,135,80,0.75)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(230,190,140,0.9)';
+    ctx.font='700 10px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText('타자 노림 · '+E.GROUP_KO[ex.group], p.x, p.y-r-5);
+    ctx.restore();
+  }
+
+  // 반투명 배트 — 노린 높이(맞았으면 공 높이)로 앞면을 가로질러 휘두름. 굵기 = 공 지름, 원근 유지
+  function drawBat(rec){
+    const side = rec.side || (batLefty ? 1 : -1);
+    const raw = game.phase==='flying' ? flightRaw() : RAW_ENTRY;
+    const zb = game.contacted && game.entry ? game.entry.Y : rec.expect ? rec.expect.z : (ZONE_TOP+ZONE_BOT)/2;
+    const K={x:side*0.62, y:zb+0.12, d:PLATE_D+0.10}, L=0.85;
+    const pose=(th)=>({x:K.x-side*L*Math.sin(th), y:zb, d:K.d-L*Math.cos(th)});
+    const draw=(th,alpha)=>{
+      const T=pose(th);
+      const dK=Math.max(K.d,-CAM_BEHIND*0.8), dT=Math.max(T.d,-CAM_BEHIND*0.8);
+      const a=proj(K.x,K.y,dK), b=proj(T.x,T.y,dT);
+      const wa=BALL_R_M*a.s*0.6, wb=BALL_R_M*b.s;     // 손잡이 가늘게, 배럴 = 공 지름
+      const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+      const nx=-dy/len, ny=dx/len;
+      ctx.beginPath();
+      ctx.moveTo(a.x+nx*wa,a.y+ny*wa); ctx.lineTo(b.x+nx*wb,b.y+ny*wb);
+      ctx.lineTo(b.x-nx*wb,b.y-ny*wb); ctx.lineTo(a.x-nx*wa,a.y-ny*wa); ctx.closePath();
+      ctx.fillStyle='rgba(160,108,60,'+alpha+')'; ctx.fill();
+      ctx.strokeStyle='rgba(90,55,25,'+(alpha*0.9)+')'; ctx.lineWidth=1; ctx.stroke();
+    };
+    ctx.save();
+    const swinging = game.phase==='flying' && raw<SW1;
+    const thNow = swinging ? swingTheta(raw) : Math.PI/2;   // 끝나면 접촉 자세로 찍힘
+    if(swinging) for(let g=3; g>=1; g--) draw(Math.max(10*Math.PI/180, thNow-g*0.22), 0.10*g);
+    draw(thNow, swinging ? 0.55 : 0.40);
+    ctx.restore();
+  }
+
+  // 맞은 공 — 앞면 통과점에서 결과에 맞는 방향으로 날아감
+  function startHit(result){
+    const e=game.entry, side=batLefty?1:-1, rnd=(a,b)=>a+Math.random()*(b-a);
+    let v;
+    if(result==='foul')        v={vx:rnd(-4,4)-side*2, vz:rnd(5,9), vd:-7};
+    else if(result==='out')    v={vx:rnd(-9,9), vz:rnd(4,9), vd:18};
+    else if(result==='single') v={vx:rnd(-8,8), vz:rnd(1.5,3.5), vd:24};
+    else if(result==='double') v={vx:(Math.random()<0.5?-1:1)*rnd(9,13), vz:rnd(4,6), vd:26};
+    else                       v={vx:rnd(-6,6), vz:rnd(10,13), vd:24};   // 홈런
+    game.hit=Object.assign({t0:performance.now(), x:e.X, z:e.Y, d:PLATE_D, result}, v);
+  }
+  function drawHit(){
+    const h=game.hit, t=(performance.now()-h.t0)/1000;
+    if(t>1.8) return;
+    const x=h.x+h.vx*t, d=h.d+h.vd*t, z=Math.max(0, h.z+h.vz*t-4.9*t*t);
+    if(d<-CAM_BEHIND*0.8) return;
+    if(z<=0 && h.result!=='hr' && t>0.3) return;      // 땅에 닿으면 끝
+    const p=proj(x,z,d), r=Math.max(2,BALL_R_M*p.s);
+    // 그림자
+    const sh=proj(x,0,d);
+    ctx.save(); ctx.globalAlpha=0.3; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(sh.x,sh.y,r*1.4,r*0.4,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+    drawBallSpin(p.x,p.y,r,performance.now());
   }
 
   function drawOuterZones(){
@@ -2396,16 +2654,29 @@ return {
     ctx.restore();
   }
 
+  function zoneName(zone){
+    const inside = (batLefty ? 1 : -1);   // 타자 몸쪽이 화면 어느 쪽인지 (우타=왼쪽)
+    if(zone<=9){
+      const row=Math.floor((zone-1)/3), col=(zone-1)%3;
+      const h=['높은','가운데','낮은'][row];
+      const sideTxt = col===1 ? '한가운데' : ((col===0 ? -1 : 1)===inside ? '몸쪽' : '바깥쪽');
+      return h+' '+sideTxt;
+    }
+    const up = zone===11||zone===12, left = zone===11||zone===13;
+    return (up?'높은':'낮은')+' 존 밖 '+((left?-1:1)===inside ? '몸쪽':'바깥쪽');
+  }
   function onArrive(){
     const rec=game.rec, inn=game.inning;
+    game.entered=true;
     if(!path.length) pushPath(ballWorld(1));   // 화면이 가려져 비행 프레임을 놓쳤어도 도착점은 그린다
-    absCross={X:rec.x, Y:rec.z, strike:absJudge(rec.x,rec.z)};
-    const [main,sub]=RESULT_TXT[rec.result];
-    let text=main, subText=sub, col=RESULT_COL[rec.result];
+    if(!game.contacted) absCross={X:rec.x, Y:rec.z, strike:absJudge(rec.x,rec.z)};
+    const [main,sub0]=RESULT_TXT[rec.result];
+    const exTxt = rec.expect ? '타자는 '+E.GROUP_KO[rec.expect.group]+' '+zoneName(rec.expect.zone)+' 노림' : '';
+    let text=main, subText=sub0 ? sub0+' · '+exTxt : exTxt, col=RESULT_COL[rec.result];
     if(rec.outcome){
       const runs=E.applyOutcome(inn, rec.outcome);
       if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]; col=RESULT_COL[rec.outcome]; }
-      subText = runs ? runs+'실점' : (E.inningOver(inn) ? '' : inn.outs+'아웃 · 다음 타자');
+      subText = (runs ? runs+'실점' : (E.inningOver(inn) ? '' : inn.outs+'아웃 · 다음 타자')) + (exTxt ? ' · '+exTxt : '');
       if(E.inningOver(inn)){
         game.phase='over';
         showMsg(text, subText, col);
