@@ -137,7 +137,7 @@
   .d-card.course .lb { color:#ff9a3d; }
 
   /* ── 한 이닝 게임 ── */
-  #page.game #canvas-box { height:calc(100vh - 315px); height:calc(100dvh - 315px); min-height:420px; }  /* 게임: 아래 투구 버튼 자리만 남김 */
+  #page.game #canvas-box { height:calc(100vh - 385px); height:calc(100dvh - 385px); min-height:360px; }  /* 게임: 아래 배너+투구 버튼 자리 */
   #page.game #detail { display:none; }
   #page.front #detail { display:none; }   /* 읽을거리는 그립 탭에 */
   #matchup { font-size:11.5px; font-weight:600; padding:6px 10px; max-width:60%; white-space:nowrap; }
@@ -170,9 +170,8 @@
   #game-hud .gh-count b.on.s { background:#ff5a5a; border-color:#ff5a5a; }
   #game-hud .gh-bat { color:#aab2c0; font-size:12px; font-weight:600; }
   #game-msg {
-    display:none; position:absolute; left:10px; right:10px; top:122px;
-    padding:8px 14px; border-radius:12px;
-    background:rgba(8,13,24,0.90); border:1.5px solid #3a4660; color:#fff;
+    display:none; margin-bottom:10px; padding:8px 14px; border-radius:12px; min-height:48px;
+    background:#0d1320; border:1.5px solid #3a4660; color:#fff;
     font-size:16px; font-weight:800; letter-spacing:0.02em; text-align:center; line-height:1.3;
   }
   #game-msg small { display:block; font-size:11px; font-weight:600; color:#8a93a3; letter-spacing:0; }
@@ -263,7 +262,6 @@
       <div class="gh-count"></div>
       <div class="gh-bat"></div>
     </div>
-    <div id="game-msg"></div>
     <div id="game-setup">
       <h3>MATCHUP</h3>
       <div class="lb">내 팀</div><div class="row" id="su-my"></div>
@@ -285,7 +283,7 @@
     <button class="mode-btn" id="real-btn">실전 ▶ 실제 속도</button>
     <button class="mode-btn" id="study-btn">학습 ▶ 이해하기</button>
   </div>
-  <div id="game-controls"><button id="throw-btn" disabled>투구</button></div>
+  <div id="game-controls"><div id="game-msg"></div><button id="throw-btn" disabled>투구</button></div>
   <div id="detail">
     <div class="d-card"><div class="lb">특징</div><div class="tx" id="d-desc"></div></div>
     <div class="d-card use"><div class="lb">용도 — 왜 던지나</div><div class="tx" id="d-use"></div></div>
@@ -1140,7 +1138,13 @@ return {
   };
 
   // 존 폭이 화면의 46% (게임은 존 밖 칸까지 보이게 38%)
-  function ZOOM(){ return (view==='game'||view==='front') ? 0.42 : 0.46; }   // 타자 시점·게임: 존 밖까지 보이게
+  // 타자 시점·게임: 존 밖 아래 칸(여유 0.17m)까지 캔버스 안에 다 들어오는 최대 줌. 그 밖은 46%
+  function ZOOM(){
+    if(!(view==='game'||view==='front')) return 0.46;
+    const HOR=H*0.34, need=(EYE_H-ZONE_BOT)+0.17+0.03;      // 눈높이→존 아래→밖 칸→여유 (m)
+    const sMax=(H-HOR-8)/need;                              // 허용되는 최대 배율(px/m)
+    return Math.min(0.42, sMax*ZONE_W/W);
+  }
   // ───────── 원근 투영 (타자 시점) ─────────
   // 존 폭이 화면의 46%가 되도록 줌 설정 → 모든 크기가 같은 자로 그려짐
   function proj(X, Y, d){
