@@ -2080,6 +2080,8 @@ return {
 
   // 실밥 기준 자세(오일러, 라디안) 두 가지: 포심계(말굽이 손끝 밑에 가로) / 투심계(좁은 실밥이 손가락 따라 세로)
   // 구종의 seamRot 이 π/4 이상이면 포심계, 아니면 투심계. 남는 각도만큼 시선축으로 더 돌린다
+  // 손바닥과 공 사이 틈 (손가락 개수) — 옆에서 본 그림용
+  const GRIP_GAP={ fourseam:1.5, twoseam:1.5, cutter:1, slider:1, curve:0.5, circle:0.3, split:0, knuckle:0.5 };
   // (손끝 위치에서 실밥이 가로/세로가 되도록 수치로 찾은 값)
   const GRIP_BASE4=[5.655, 5.498, 3.77], GRIP_BASE2=[6.109, 0.349, 1.745];
   function gripRot(seamRot){
@@ -2125,7 +2127,7 @@ return {
     bg.addColorStop(0,'#0b172b'); bg.addColorStop(1,'#050a12');
     ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-    const cx=W*0.42, cy=H*0.42, R=Math.min(W*0.31,H*0.26);
+    const cx=W*0.36, cy=H*0.42, R=Math.min(W*0.29,H*0.26);
     ctx.fillStyle='#fff'; ctx.font='800 15px -apple-system,sans-serif'; ctx.textAlign='left';
     ctx.fillText('그립 — 실밥 위 어디를 짚는가',16,25);
     ctx.fillStyle=cur.color; ctx.font='800 12px -apple-system,sans-serif'; ctx.textAlign='right';
@@ -2188,6 +2190,9 @@ return {
         // 관절 주름
         ctx.strokeStyle='rgba(150,100,78,0.45)'; ctx.lineWidth=1.2;
         for(const f of [0.42,0.68]){ const jx=x+(ex-x)*f, jy=y+(ey-y)*f; ctx.beginPath(); ctx.moveTo(jx-R*0.085,jy); ctx.lineTo(jx+R*0.085,jy); ctx.stroke(); }
+        // 둘째 마디도 공 위에 눕듯이 닿음 (접촉 음영)
+        { const jx=x+(ex-x)*0.42, jy=y+(ey-y)*0.42;
+          ctx.fillStyle='rgba(120,80,60,0.18)'; ctx.beginPath(); ctx.ellipse(jx,jy,R*0.10,R*0.07,Math.atan2(ey-y,ex-x),0,Math.PI*2); ctx.fill(); }
         // 손끝 패드 — 실밥이 비치게 반투명
         ctx.fillStyle='rgba(236,196,170,0.55)'; ctx.strokeStyle=SKIN_DK; ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.ellipse(x,y,R*0.115,R*0.085,fp[0]*0.6,0,Math.PI*2); ctx.fill(); ctx.stroke();
@@ -2252,6 +2257,40 @@ return {
       ctx.beginPath(); ctx.ellipse(X+R*0.04,Y-R*0.02,R*0.075,R*0.055,0.4,0,Math.PI*2); ctx.fill(); ctx.stroke();
       ctx.restore();
       ctx.fillStyle='rgba(255,208,91,0.95)'; ctx.font='800 10px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillText('엄지', X-R*0.1, Y+R*0.30);
+    }
+
+    // ── 옆에서: 손바닥과 공 사이 틈 ──
+    { const gap=GRIP_GAP[type]??1;
+      const ix=W*0.84, iy=H*0.27, ir=Math.min(R*0.34,W*0.085), fw=ir*0.36;   // fw = 손가락 하나 굵기
+      ctx.save();
+      ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.roundRect(ix-ir*2.1, iy-ir*1.75, ir*3.6, ir*4.3, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='800 10.5px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('옆에서 본 손', ix-ir*0.3, iy-ir*1.45);
+      // 손바닥 (왼쪽 세로)
+      const px=ix-ir-gap*fw;
+      ctx.strokeStyle='rgba(226,190,162,0.95)'; ctx.lineWidth=ir*0.55; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(px-ir*0.2, iy-ir*1.0); ctx.lineTo(px-ir*0.2, iy+ir*1.0); ctx.stroke();
+      // 공
+      const sg=ctx.createRadialGradient(ix-ir*0.3,iy-ir*0.3,ir*0.1,ix,iy,ir); sg.addColorStop(0,'#fff'); sg.addColorStop(1,'#cfc6b6');
+      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(ix,iy,ir,0,Math.PI*2); ctx.fill();
+      // 손가락: 손바닥 위에서 나와 공 위에 눕고 앞으로
+      const tipX = type==='split' ? ix+ir*0.9 : ix+ir*0.55, tipY = type==='split' ? iy : iy-ir*0.85;
+      ctx.strokeStyle='rgba(150,100,78,0.9)'; ctx.lineWidth=fw*1.15; ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy-ir*0.95); ctx.quadraticCurveTo(ix-ir*0.3, iy-ir*1.35, tipX, tipY); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=fw; ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy-ir*0.95); ctx.quadraticCurveTo(ix-ir*0.3, iy-ir*1.35, tipX, tipY); ctx.stroke();
+      // 엄지: 아래
+      ctx.strokeStyle='rgba(150,100,78,0.9)'; ctx.lineWidth=fw*1.15; ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy+ir*0.75); ctx.quadraticCurveTo(ix-ir*0.3, iy+ir*1.3, ix+ir*0.15, iy+ir*0.98); ctx.stroke();
+      ctx.strokeStyle='rgba(232,196,168,0.95)'; ctx.lineWidth=fw; ctx.beginPath(); ctx.moveTo(px-ir*0.1, iy+ir*0.75); ctx.quadraticCurveTo(ix-ir*0.3, iy+ir*1.3, ix+ir*0.15, iy+ir*0.98); ctx.stroke();
+      // 틈 표시: 손가락 개수만큼 작은 원
+      if(gap>0){
+        ctx.fillStyle='rgba(255,208,91,0.55)';
+        for(let k=0;k<Math.ceil(gap);k++){ const w=Math.min(1,gap-k); ctx.beginPath(); ctx.ellipse(px+ir*0.08+fw*(k+w/2), iy, fw*0.42*w, fw*0.42, 0, 0, Math.PI*2); ctx.fill(); }
+      }
+      ctx.fillStyle='rgba(255,208,91,0.95)'; ctx.font='800 10.5px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('손바닥-공 틈', ix-ir*0.3, iy+ir*1.62);
+      ctx.fillStyle='#fff'; ctx.font='800 12px -apple-system,sans-serif';
+      ctx.fillText(gap===0 ? '없음 (끼움)' : '손가락 '+gap+'개', ix-ir*0.3, iy+ir*2.05);
+      ctx.restore();
     }
 
     // ── 핵심 카드 ──
