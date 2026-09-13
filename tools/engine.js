@@ -195,12 +195,23 @@ function buildTable(json, priorWeight = PRIOR_WEIGHT) {
 
 // ---------- 도감용: 이 공은 어디가 좋고, 이 조합은 어떤가, 앞에 뭘 던지면 좋나 ----------
 // 투수 점수: 헛스윙·아웃은 +, 안타·장타는 −. 안 휘두른 공은 존 안이면 스트라이크(+), 밖이면 볼(−)
-function pitcherScore(p, takeW) {
-  return p.whiff * 1 + p.foul * 0.4 + p.out * 0.7 + p.take * takeW - p.single * 1.2 - p.double * 2 - p.hr * 3.5;
+// 두 가지 눈: 'count' = 카운트 잡기 (루킹도 값짐, 볼은 손해)  /  'finish' = 결정구, 2스트라이크 (헛스윙이 전부, 볼은 덜 손해)
+const SCORE_W = {
+  count:  { whiff: 1.0, foul: 0.4, out: 0.7, takeIn: 0.6, takeOut: -0.5, single: -1.2, double: -2, hr: -3.5 },
+  finish: { whiff: 1.6, foul: 0.2, out: 0.7, takeIn: 0.9, takeOut: -0.25, single: -1.2, double: -2, hr: -3.5 },
+};
+function pitcherScore(p, takeW, mode = 'count') {
+  const w = SCORE_W[mode];
+  return p.whiff * w.whiff + p.foul * w.foul + p.out * w.out + p.take * takeW - p.single * -w.single - p.double * -w.double - p.hr * -w.hr;
 }
-function zoneScores(table, pt, hands) {
+function zoneScores(table, pt, hands, mode = 'count') {
+  const w = SCORE_W[mode];
   const out = {};
-  for (const z of ZONES) out[z] = pitcherScore(table.probs[`${pt}|${z}|${hands}`], z <= 9 ? 0.6 : -0.5);
+  for (const z of ZONES) {
+    let p = table.probs[`${pt}|${z}|${hands}`];
+    if (mode === 'finish' && table.countAdj) p = adjustByCount(p, table.countAdj, 0, 2, z);   // 0-2 상황의 확률로
+    out[z] = pitcherScore(p, z <= 9 ? w.takeIn : w.takeOut, mode);
+  }
   return out;
 }
 // 이 조합(좌우)에서 이 공이 4조합 평균보다 좋은가: 존 안 9칸 평균 점수 차
@@ -559,7 +570,7 @@ return {
   PITCH_TYPES, ZONES, HANDS, RESULTS, PROB_KEYS, IN_PLAY, PRIOR_WEIGHT, WOBBLE, WOBBLE_SCALE, ZONE_GEOM,
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
-  pitcherScore, zoneScores, matchupRating, prevAdvice,
+  SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
