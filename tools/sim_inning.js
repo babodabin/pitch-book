@@ -48,7 +48,7 @@ if (mode === 'one') {
     let won = 0, lost = 0, draw = 0, extra = 0, pas = 0, pitches = 0;
     const paCnt = {};
     for (let i = 0; i < N; i++) {
-      const r = E.simulateGame(table, 'R', batter, policyFactory(), { rng, ...opts });
+      const r = E.simulateGame(table, 'R', batter, policyFactory(), { rng, lineup: E.LINEUP, ...opts });
       if (r.result === 'win') won++; else if (r.result === 'lose') lost++; else draw++;
       if (r.innings > 9) extra++;
       pas += r.pas.length;

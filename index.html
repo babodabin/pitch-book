@@ -190,7 +190,16 @@
   }
   #game-end .ge-title { font-family:'Special Elite', monospace; font-size:40px; letter-spacing:0.12em; color:#fff; }
   #game-end .ge-sub { font-size:14px; color:#aab2c0; font-weight:600; text-align:center; line-height:1.6; }
-  #game-end button {
+  #game-end .ge-rec { font-size:12px; color:#7a8290; font-weight:600; }
+  #game-end .ge-hits { display:flex; flex-direction:column; gap:6px; margin-top:4px; max-width:86%; }
+  #game-end .ge-hits .lb { font-size:11px; color:#7a8290; font-weight:700; text-align:center; }
+  #game-end .ge-hit {
+    font-size:13px; font-weight:700; padding:8px 12px; border-radius:10px; text-align:left;
+    background:rgba(10,16,28,0.9); border:1.5px solid #3a4660; color:#dfe3e8;
+  }
+  #game-end .ge-hit span { color:#5a8fd4; font-size:11px; margin-left:6px; }
+  #game-end .ge-hit:active { transform:translateY(1px); }
+  #game-end button#game-again {
     margin-top:6px; font-size:16px; font-weight:800; padding:12px 28px; border-radius:13px; border:none;
     background:#fff; color:#000;
   }
@@ -237,6 +246,8 @@
     <div id="game-end">
       <div class="ge-title"></div>
       <div class="ge-sub"></div>
+      <div class="ge-rec"></div>
+      <div class="ge-hits"></div>
       <button id="game-again">다시 하기</button>
     </div>
   </div>
@@ -535,6 +546,36 @@ const AI = {
   hit: 1.35,       // 난이도: 안타·장타 확률 배수 (1 = 실측 평균 타자). 헛스윙은 반대로 나눔
 };
 
+// ---------- 타자 9명: 이름은 지어낸 것, 성향은 확률 배수 (설계값) ----------
+// take: 안 휘두름, whiff: 헛스윙, single/double/hr: 타구 질, read: 볼배합 읽는 감도(기억·패턴 배수), sit: 노림 강도
+const BATTER_TYPES = {
+  contact:  { ko: '컨택',    take: 1.0,  whiff: 0.75, single: 1.25, double: 1.0,  hr: 0.7,  read: 1.0, sit: 1.0 },
+  patient:  { ko: '잘 참음', take: 1.3,  whiff: 0.9,  single: 1.0,  double: 1.0,  hr: 0.9,  read: 1.0, sit: 0.9 },
+  power:    { ko: '장타력',  take: 0.95, whiff: 1.15, single: 0.85, double: 1.25, hr: 1.6,  read: 1.0, sit: 1.1 },
+  guess:    { ko: '노림수',  take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.1,  hr: 1.1,  read: 1.6, sit: 1.3 },
+  aggro:    { ko: '적극적',  take: 0.7,  whiff: 1.2,  single: 1.05, double: 1.05, hr: 1.0,  read: 0.8, sit: 0.9 },
+  average:  { ko: '평균',    take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.0,  hr: 1.0,  read: 1.0, sit: 1.0 },
+};
+const LINEUP = [
+  { name: '김도현', hand: 'L', type: 'contact' },
+  { name: '박민재', hand: 'R', type: 'patient' },
+  { name: '이준서', hand: 'L', type: 'guess' },
+  { name: '최현우', hand: 'R', type: 'power' },
+  { name: '정우진', hand: 'L', type: 'power' },
+  { name: '강태양', hand: 'R', type: 'average' },
+  { name: '윤지호', hand: 'R', type: 'aggro' },
+  { name: '한승민', hand: 'L', type: 'average' },
+  { name: '오세훈', hand: 'R', type: 'aggro' },
+];
+function applyBatter(p, type) {
+  const t = BATTER_TYPES[type]; if (!t) return p;
+  const q = { ...p }; let s = 0;
+  q.take *= t.take; q.whiff *= t.whiff; q.single *= t.single; q.double *= t.double; q.hr *= t.hr;
+  for (const r of PROB_KEYS) s += q[r];
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 function applyDifficulty(p) {
   const h = AI.hit;
   if (h === 1) return p;
@@ -548,7 +589,7 @@ function applyDifficulty(p) {
 function dist2(a, b) { return (a.x - b.x) ** 2 + (a.z - b.z) ** 2; }
 
 // scout: 이 이닝에 투수가 던진 공들 [{pitchType, zone}] (오래된 것부터)
-function chooseExpectation(scout, balls, strikes, rng) {
+function chooseExpectation(scout, balls, strikes, rng, read = 1) {
   const cells = ZONES.map((z) => ({ zone: z, pt: zoneTarget(z) }));
   const w = {};
   for (const g of GROUPS) for (const c of cells) w[g + '|' + c.zone] = AI.base;
@@ -560,7 +601,7 @@ function chooseExpectation(scout, balls, strikes, rng) {
   };
   const n = scout.length;
   // 기억 1: 최근에 던진 공 (최근일수록 무겁게)
-  for (let i = 0; i < n; i++) add(scout[i], AI.memory * Math.pow(AI.decay, n - 1 - i));
+  for (let i = 0; i < n; i++) add(scout[i], read * AI.memory * Math.pow(AI.decay, n - 1 - i));
   // 기억 2: 패턴 — 직전 공과 비슷한 공 뒤에 뭐가 왔었나
   if (n >= 2) {
     const last = scout[n - 1], lpt = zoneTarget(last.zone);
@@ -568,7 +609,7 @@ function chooseExpectation(scout, balls, strikes, rng) {
       const prev = scout[i];
       if (GROUP[prev.pitchType] !== GROUP[last.pitchType]) continue;
       const sim = kern(zoneTarget(prev.zone), lpt);
-      add(scout[i + 1], AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
+      add(scout[i + 1], read * AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
     }
   }
   // 카운트
@@ -629,13 +670,15 @@ function throwPitch(table, st, pick, opts = {}) {
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
+  const bt = BATTER_TYPES[opts.batter] || BATTER_TYPES.average;
   let expect = null, match = null;
   if (opts.ai !== false) {
-    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng);
+    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng, bt.read);
     match = matchScore(expect, pick.pitchType, land.x, land.z);
     const m0 = baselineMatch(pick.pitchType, land.x, land.z);
-    p = applyExpectation(p, match, m0, expect.strength || 1);
+    p = applyExpectation(p, match, m0, (expect.strength || 1) * bt.sit);
   }
+  if (opts.batter) p = applyBatter(p, opts.batter);
   p = applyDifficulty(p);
   let result = sampleResult(p, rng);
   if (result === 'take') {
@@ -761,7 +804,10 @@ function simulateGame(table, pitcherHand, batterHands, choose, opts = {}) {
   const paOpts = { ...opts, scout: opts.scout || [] };
   let i = 0, status;
   for (;;) {
-    const hands = pitcherHand + batterHands(i++);
+    const b = opts.lineup ? opts.lineup[i % opts.lineup.length] : null;
+    const hands = pitcherHand + (b ? b.hand : batterHands(i));
+    if (b) paOpts.batter = b.type;
+    i++;
     const pa = simulatePA(table, hands, choose, paOpts);
     const r = applyOutcome(g.inn, pa.outcome, rng);
     pas.push({ inning: g.inn.inning, hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: g.inn.outs, bases: g.inn.bases.slice() });
@@ -832,7 +878,7 @@ return {
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
-  GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
@@ -2470,12 +2516,8 @@ return {
   ];
   const GAME_PITCH_MAP=Object.fromEntries(GAME_PITCHES);
 
-  // 타자 9명 — 이름·성향은 7단계에서. 지금은 번호와 좌우만
-  const LINEUP=[
-    {name:'1번 타자',hand:'R'},{name:'2번 타자',hand:'L'},{name:'3번 타자',hand:'R'},
-    {name:'4번 타자',hand:'L'},{name:'5번 타자',hand:'R'},{name:'6번 타자',hand:'R'},
-    {name:'7번 타자',hand:'L'},{name:'8번 타자',hand:'R'},{name:'9번 타자',hand:'L'}
-  ];
+  // 타자 9명 — 이름·좌우·성향은 엔진(engine.js LINEUP / BATTER_TYPES)에
+  const LINEUP = E ? E.LINEUP : [];
 
   const RESULT_TXT={
     ball:['볼',''], called:['스트라이크','루킹'], whiff:['스트라이크','헛스윙'], foul:['파울',''],
@@ -2591,7 +2633,7 @@ return {
     for(let i=0;i<2;i++) h+='<b class="s'+(i<pa.strikes?' on':'')+'"></b>';
     document.querySelector('#game-hud .gh-count').innerHTML=h;
     const bt=LINEUP[game.batterIdx%9];
-    document.querySelector('#game-hud .gh-bat').textContent=bt.name+' · '+(bt.hand==='L'?'좌타':'우타')+' · '+pa.history.length+'구';
+    document.querySelector('#game-hud .gh-bat').textContent=(game.batterIdx%9+1)+'번 '+bt.name+' · '+(bt.hand==='L'?'좌타':'우타')+' · '+E.BATTER_TYPES[bt.type].ko+' · '+pa.history.length+'구';
   }
 
   // 화면 탭 → 존 칸
@@ -2631,13 +2673,13 @@ return {
   function throwGamePitch(zone){
     const base=GAME_PITCH_MAP[gamePitch];
     game.pa.hands=curHands();
-    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge, scout:game.scout});
+    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge, scout:game.scout, batter:LINEUP[game.batterIdx%9].type});
     const sgn=lefty?-1:1;
     const aim=E.zoneTarget(zone);
     gameAim={x:aim.x, z:aim.z};
     // 노림(tx/ty)은 조준 표시, 실제 도달(ax/ay)은 실투가 반영된 점. sgn 은 ballWorldFor 가 다시 곱하므로 미리 나눔
     cur=Object.assign({}, base, {tx:aim.x*sgn, ty:aim.z, ax:rec.x*sgn, ay:rec.z});
-    game.rec=rec; rec.side = batLefty ? 1 : -1;
+    game.rec=rec; rec.side = batLefty ? 1 : -1; rec.hands = game.pa.hands; rec.batter = LINEUP[game.batterIdx%9].name;
     game.phase='flying';
     game.aimZone=null;
     $('throw-btn').disabled=true;
@@ -2839,6 +2881,7 @@ return {
       subText = (runs ? runs+'실점 · '+game.g.us+':'+(game.g.them+inn.runs) : inn.outs+'아웃') + (exTxt ? ' · '+exTxt : '');
       if(status==='win'||status==='lose'||status==='draw'){
         game.phase='over';
+        saveRecord(status);
         showMsg(text, subText, col);
         updateHUD();
         clearTimeout(game.endTimer);
@@ -2878,8 +2921,47 @@ return {
       ? where+' 종료 — '+g.us+' : '+them+' 승리'
       : status==='lose' ? where+' 끝내기 — '+g.us+' : '+them+' 패배'
       : '12회까지 '+g.us+' : '+them+' — 무승부';
+    const rec=loadRecord();
+    end.querySelector('.ge-rec').textContent = '통산 '+rec.win+'승 '+rec.lose+'패'+(rec.draw?' '+rec.draw+'무':'')+(rec.streak>1?' · '+rec.streak+'연승':'');
+    // 이번 판에 맞은 공 → 도감에서 보기
+    const hits=game.scout.filter(r=>r.outcome==='single'||r.outcome==='double'||r.outcome==='hr').slice(-3);
+    const box=end.querySelector('.ge-hits'); box.innerHTML='';
+    if(hits.length){
+      const lb=document.createElement('div'); lb.className='lb'; lb.textContent='맞은 공 — 도감에서 보기'; box.appendChild(lb);
+      for(const r of hits){
+        const b=document.createElement('button'); b.className='ge-hit';
+        const nm=GAME_PITCH_MAP[r.pitchType].name.split(' ')[0];
+        b.innerHTML=nm+' '+zoneNameFor(r.zone, r.hands[1]==='L')+' → '+RESULT_TXT[r.outcome][0]+' ('+r.batter+')<span>도감 ›</span>';
+        b.addEventListener('click', ()=>openInDex(r));
+        box.appendChild(b);
+      }
+    }
     end.style.display='flex';
     $('game-msg').style.display='none';
+  }
+  function zoneNameFor(zone, batL){ const keep=batLefty; batLefty=batL; const t=zoneName(zone); batLefty=keep; return t; }
+
+  // ── 통산 기록 (localStorage) ──
+  const REC_KEY='pb_inning_record';
+  function loadRecord(){ try{ return Object.assign({win:0,lose:0,draw:0,streak:0,best:0}, JSON.parse(localStorage.getItem(REC_KEY)||'{}')); }catch(e){ return {win:0,lose:0,draw:0,streak:0,best:0}; } }
+  function saveRecord(status){
+    const r=loadRecord();
+    r[status]=(r[status]||0)+1;
+    r.streak = status==='win' ? (r.streak||0)+1 : 0;
+    r.best = Math.max(r.best||0, r.streak);
+    try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); }catch(e){}
+  }
+
+  // ── 맞은 공을 도감 타자 시점에서 열기: 같은 구종·같은 좌우·같은 칸 ──
+  function openInDex(r){
+    const p=GAME_PITCH_MAP[r.pitchType];
+    dexCur=p;                                   // 탭 전환 때 leaveGame 이 cur=dexCur 로 되돌리므로 먼저 지정
+    lefty = r.hands[0]==='L'; batLefty = r.hands[1]==='L';
+    document.querySelector('.tab[data-v=front]').click();
+    document.querySelectorAll('#pitch-bar .p-chip').forEach(c=>c.classList.toggle('on', c.textContent===p.name.split(' ')[0]));
+    const t=E.zoneTarget(r.zone); dexAim={x:t.x, z:t.z};
+    updateMatchup(); updateInfo();
+    doThrow('real');
   }
   $('game-again').addEventListener('click', ()=>newGame());
 

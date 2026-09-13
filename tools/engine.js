@@ -274,6 +274,36 @@ const AI = {
   hit: 1.35,       // 난이도: 안타·장타 확률 배수 (1 = 실측 평균 타자). 헛스윙은 반대로 나눔
 };
 
+// ---------- 타자 9명: 이름은 지어낸 것, 성향은 확률 배수 (설계값) ----------
+// take: 안 휘두름, whiff: 헛스윙, single/double/hr: 타구 질, read: 볼배합 읽는 감도(기억·패턴 배수), sit: 노림 강도
+const BATTER_TYPES = {
+  contact:  { ko: '컨택',    take: 1.0,  whiff: 0.75, single: 1.25, double: 1.0,  hr: 0.7,  read: 1.0, sit: 1.0 },
+  patient:  { ko: '잘 참음', take: 1.3,  whiff: 0.9,  single: 1.0,  double: 1.0,  hr: 0.9,  read: 1.0, sit: 0.9 },
+  power:    { ko: '장타력',  take: 0.95, whiff: 1.15, single: 0.85, double: 1.25, hr: 1.6,  read: 1.0, sit: 1.1 },
+  guess:    { ko: '노림수',  take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.1,  hr: 1.1,  read: 1.6, sit: 1.3 },
+  aggro:    { ko: '적극적',  take: 0.7,  whiff: 1.2,  single: 1.05, double: 1.05, hr: 1.0,  read: 0.8, sit: 0.9 },
+  average:  { ko: '평균',    take: 1.0,  whiff: 1.0,  single: 1.0,  double: 1.0,  hr: 1.0,  read: 1.0, sit: 1.0 },
+};
+const LINEUP = [
+  { name: '김도현', hand: 'L', type: 'contact' },
+  { name: '박민재', hand: 'R', type: 'patient' },
+  { name: '이준서', hand: 'L', type: 'guess' },
+  { name: '최현우', hand: 'R', type: 'power' },
+  { name: '정우진', hand: 'L', type: 'power' },
+  { name: '강태양', hand: 'R', type: 'average' },
+  { name: '윤지호', hand: 'R', type: 'aggro' },
+  { name: '한승민', hand: 'L', type: 'average' },
+  { name: '오세훈', hand: 'R', type: 'aggro' },
+];
+function applyBatter(p, type) {
+  const t = BATTER_TYPES[type]; if (!t) return p;
+  const q = { ...p }; let s = 0;
+  q.take *= t.take; q.whiff *= t.whiff; q.single *= t.single; q.double *= t.double; q.hr *= t.hr;
+  for (const r of PROB_KEYS) s += q[r];
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 function applyDifficulty(p) {
   const h = AI.hit;
   if (h === 1) return p;
@@ -287,7 +317,7 @@ function applyDifficulty(p) {
 function dist2(a, b) { return (a.x - b.x) ** 2 + (a.z - b.z) ** 2; }
 
 // scout: 이 이닝에 투수가 던진 공들 [{pitchType, zone}] (오래된 것부터)
-function chooseExpectation(scout, balls, strikes, rng) {
+function chooseExpectation(scout, balls, strikes, rng, read = 1) {
   const cells = ZONES.map((z) => ({ zone: z, pt: zoneTarget(z) }));
   const w = {};
   for (const g of GROUPS) for (const c of cells) w[g + '|' + c.zone] = AI.base;
@@ -299,7 +329,7 @@ function chooseExpectation(scout, balls, strikes, rng) {
   };
   const n = scout.length;
   // 기억 1: 최근에 던진 공 (최근일수록 무겁게)
-  for (let i = 0; i < n; i++) add(scout[i], AI.memory * Math.pow(AI.decay, n - 1 - i));
+  for (let i = 0; i < n; i++) add(scout[i], read * AI.memory * Math.pow(AI.decay, n - 1 - i));
   // 기억 2: 패턴 — 직전 공과 비슷한 공 뒤에 뭐가 왔었나
   if (n >= 2) {
     const last = scout[n - 1], lpt = zoneTarget(last.zone);
@@ -307,7 +337,7 @@ function chooseExpectation(scout, balls, strikes, rng) {
       const prev = scout[i];
       if (GROUP[prev.pitchType] !== GROUP[last.pitchType]) continue;
       const sim = kern(zoneTarget(prev.zone), lpt);
-      add(scout[i + 1], AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
+      add(scout[i + 1], read * AI.pattern * sim * Math.pow(AI.decay, (n - 2 - i) * 0.5));
     }
   }
   // 카운트
@@ -368,13 +398,15 @@ function throwPitch(table, st, pick, opts = {}) {
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
+  const bt = BATTER_TYPES[opts.batter] || BATTER_TYPES.average;
   let expect = null, match = null;
   if (opts.ai !== false) {
-    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng);
+    expect = opts.expect || chooseExpectation(opts.scout || [], st.balls, st.strikes, rng, bt.read);
     match = matchScore(expect, pick.pitchType, land.x, land.z);
     const m0 = baselineMatch(pick.pitchType, land.x, land.z);
-    p = applyExpectation(p, match, m0, expect.strength || 1);
+    p = applyExpectation(p, match, m0, (expect.strength || 1) * bt.sit);
   }
+  if (opts.batter) p = applyBatter(p, opts.batter);
   p = applyDifficulty(p);
   let result = sampleResult(p, rng);
   if (result === 'take') {
@@ -500,7 +532,10 @@ function simulateGame(table, pitcherHand, batterHands, choose, opts = {}) {
   const paOpts = { ...opts, scout: opts.scout || [] };
   let i = 0, status;
   for (;;) {
-    const hands = pitcherHand + batterHands(i++);
+    const b = opts.lineup ? opts.lineup[i % opts.lineup.length] : null;
+    const hands = pitcherHand + (b ? b.hand : batterHands(i));
+    if (b) paOpts.batter = b.type;
+    i++;
     const pa = simulatePA(table, hands, choose, paOpts);
     const r = applyOutcome(g.inn, pa.outcome, rng);
     pas.push({ inning: g.inn.inning, hands, outcome: pa.outcome, pitches: pa.pitches, runs: r, outs: g.inn.outs, bases: g.inn.bases.slice() });
@@ -571,7 +606,7 @@ return {
   zoneTarget, pointToZone, applyWobble,
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
-  GROUP, GROUPS, GROUP_KO, AI, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, LINEUP, applyBatter, chooseExpectation, matchScore, baselineMatch, applyExpectation,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
