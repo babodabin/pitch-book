@@ -513,6 +513,39 @@ function pitchProbs(table, st, pick, land, opts = {}) {
   return { p, p0, expect, match, effect };
 }
 
+// ---------- 투구 평가: 그 순간 고를 수 있던 공들 중 몇 등이었나 ----------
+// 카운트별 기대 득점 (타자 입장, 0-0 = 0 기준 — 공개된 카운트 런 밸류 근사). 결과로 바뀌는 만큼이 그 공의 값
+const COUNT_RV = { '0-0': 0, '1-0': 0.038, '2-0': 0.104, '3-0': 0.200, '0-1': -0.043, '1-1': -0.015, '2-1': 0.036, '3-1': 0.138,
+                   '0-2': -0.103, '1-2': -0.079, '2-2': -0.040, '3-2': 0.051 };
+const END_RV = { walk: 0.32, strikeout: -0.27, out: -0.27, single: 0.47, double: 0.78, hr: 1.40 };
+// 투수 입장 기대 가치 (+ = 투수에게 좋음). strike = 안 휘둘렀을 때 스트라이크인가
+function pitchValue(p, strike, balls, strikes) {
+  const now = COUNT_RV[balls + '-' + strikes];
+  const after = (b, s) => (b >= 4 ? END_RV.walk : s >= 3 ? END_RV.strikeout : COUNT_RV[b + '-' + s]);
+  const rvStrike = after(balls, strikes + 1), rvBall = after(balls + 1, strikes), rvFoul = strikes < 2 ? rvStrike : now;
+  const rv = p.whiff * rvStrike + p.take * (strike ? rvStrike : rvBall) + p.foul * rvFoul
+           + p.out * END_RV.out + p.single * END_RV.single + p.double * END_RV.double + p.hr * END_RV.hr;
+  return now - rv;
+}
+// st 는 던지기 전 상태. reps = 고를 수 있는 구종 목록. opts 는 pitchProbs 와 같음 (타자 노림은 끄고 평가)
+function evaluatePick(table, st, pick, reps, opts = {}) {
+  const o = { ...opts, ai: false };
+  const judge = opts.judge || ((x, z) => pointToZone(x, z) <= 9);
+  const val = (pt, zone) => {
+    const t = zoneTarget(zone), land = { zone, x: t.x, z: t.z };
+    const r = pitchProbs(table, st, { pitchType: pt, zone }, land, o);
+    return pitchValue(r.p, judge(t.x, t.z), st.balls, st.strikes);
+  };
+  const all = [];
+  for (const pt of reps) for (const z of ZONES) all.push({ pitchType: pt, zone: z, v: val(pt, z) });
+  all.sort((a, b) => b.v - a.v);
+  const mine = val(pick.pitchType, pick.zone);
+  const better = all.filter((a) => a.v > mine + 1e-9).length;
+  const pct = better / all.length;                     // 0 = 1등
+  const grade = pct <= 0.15 ? 'best' : pct <= 0.4 ? 'good' : pct <= 0.7 ? 'meh' : 'bad';
+  return { v: mine, pct, rank: better + 1, total: all.length, grade, best: all[0] };
+}
+
 function throwPitch(table, st, pick, opts = {}) {
   const rng = opts.rng || Math.random;
   const wobble = opts.wobble !== false;
@@ -719,7 +752,7 @@ return {
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, batSide, chooseExpectation, matchScore, baselineMatch, applyExpectation,
-  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs,
+  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs, pitchValue, evaluatePick,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,

@@ -182,6 +182,8 @@
     background:transparent; border:1.5px solid #3a4660; color:#dfe3e8;
   }
   #game-hud.practice .gh-row, #game-hud.practice .gh-score { display:none; }
+  #game-msg .grade { display:block; font-size:11px; font-weight:800; margin-top:2px; letter-spacing:0; }
+  #game-msg .grade.best { color:#52e07a; } #game-msg .grade.good { color:#9fd4ff; } #game-msg .grade.meh { color:#ffb86b; } #game-msg .grade.bad { color:#ff6b6b; }
   #game-msg .eff { display:block; font-size:10.5px; font-weight:700; color:#ffd23b; margin-top:2px; letter-spacing:0; }
   #game-hud .gh-score { font-size:18px; font-weight:800; letter-spacing:0.04em; margin-left:6px; }
   #game-hud .gh-row { display:flex; align-items:center; gap:8px; }
@@ -848,6 +850,39 @@ function pitchProbs(table, st, pick, land, opts = {}) {
   return { p, p0, expect, match, effect };
 }
 
+// ---------- 투구 평가: 그 순간 고를 수 있던 공들 중 몇 등이었나 ----------
+// 카운트별 기대 득점 (타자 입장, 0-0 = 0 기준 — 공개된 카운트 런 밸류 근사). 결과로 바뀌는 만큼이 그 공의 값
+const COUNT_RV = { '0-0': 0, '1-0': 0.038, '2-0': 0.104, '3-0': 0.200, '0-1': -0.043, '1-1': -0.015, '2-1': 0.036, '3-1': 0.138,
+                   '0-2': -0.103, '1-2': -0.079, '2-2': -0.040, '3-2': 0.051 };
+const END_RV = { walk: 0.32, strikeout: -0.27, out: -0.27, single: 0.47, double: 0.78, hr: 1.40 };
+// 투수 입장 기대 가치 (+ = 투수에게 좋음). strike = 안 휘둘렀을 때 스트라이크인가
+function pitchValue(p, strike, balls, strikes) {
+  const now = COUNT_RV[balls + '-' + strikes];
+  const after = (b, s) => (b >= 4 ? END_RV.walk : s >= 3 ? END_RV.strikeout : COUNT_RV[b + '-' + s]);
+  const rvStrike = after(balls, strikes + 1), rvBall = after(balls + 1, strikes), rvFoul = strikes < 2 ? rvStrike : now;
+  const rv = p.whiff * rvStrike + p.take * (strike ? rvStrike : rvBall) + p.foul * rvFoul
+           + p.out * END_RV.out + p.single * END_RV.single + p.double * END_RV.double + p.hr * END_RV.hr;
+  return now - rv;
+}
+// st 는 던지기 전 상태. reps = 고를 수 있는 구종 목록. opts 는 pitchProbs 와 같음 (타자 노림은 끄고 평가)
+function evaluatePick(table, st, pick, reps, opts = {}) {
+  const o = { ...opts, ai: false };
+  const judge = opts.judge || ((x, z) => pointToZone(x, z) <= 9);
+  const val = (pt, zone) => {
+    const t = zoneTarget(zone), land = { zone, x: t.x, z: t.z };
+    const r = pitchProbs(table, st, { pitchType: pt, zone }, land, o);
+    return pitchValue(r.p, judge(t.x, t.z), st.balls, st.strikes);
+  };
+  const all = [];
+  for (const pt of reps) for (const z of ZONES) all.push({ pitchType: pt, zone: z, v: val(pt, z) });
+  all.sort((a, b) => b.v - a.v);
+  const mine = val(pick.pitchType, pick.zone);
+  const better = all.filter((a) => a.v > mine + 1e-9).length;
+  const pct = better / all.length;                     // 0 = 1등
+  const grade = pct <= 0.15 ? 'best' : pct <= 0.4 ? 'good' : pct <= 0.7 ? 'meh' : 'bad';
+  return { v: mine, pct, rank: better + 1, total: all.length, grade, best: all[0] };
+}
+
 function throwPitch(table, st, pick, opts = {}) {
   const rng = opts.rng || Math.random;
   const wobble = opts.wobble !== false;
@@ -1054,7 +1089,7 @@ return {
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, batSide, chooseExpectation, matchScore, baselineMatch, applyExpectation,
-  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs,
+  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs, pitchValue, evaluatePick,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
@@ -2690,6 +2725,7 @@ return {
     const opts = prac ? {judge:absJudge, ai:false, prev:game.prev||null}
                       : {judge:absJudge, scout:game.scout, batter:LINEUP[game.batterIdx%9].type};
     if(prac){ const aimPt=E.zoneTarget(zone); game.pred=E.pitchProbs(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {zone:zone, x:aimPt.x, z:aimPt.z}, opts); }
+    game.grade=E.evaluatePick(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, availablePitches(), opts);
     const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, opts);
     if(prac) game.prev={pitchType:rec.pitchType, x:rec.x, z:rec.z};
     const sgn=lefty?-1:1;
@@ -2894,10 +2930,12 @@ return {
     const why = effectReason(rec.effect, true);
     const exTxt = rec.expect ? '타자는 '+E.GROUP_KO[rec.expect.group]+' '+zoneName(rec.expect.zone)+' 노림' : '';
     let text=main, subText=sub0 ? sub0+' · '+exTxt : exTxt, col=RESULT_COL[rec.result];
+    const gl=gradeLine(game.grade, rec);
+    text += gl;
     if(why) text += '<span class="eff">'+why+'</span>';
     if(rec.outcome){
       const runs=E.applyOutcome(inn, rec.outcome);
-      if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]+(why?'<span class="eff">'+why+'</span>':''); col=RESULT_COL[rec.outcome]; }
+      if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]+gl+(why?'<span class="eff">'+why+'</span>':''); col=RESULT_COL[rec.outcome]; }
       const status=E.gameStatus(game.g);
       subText = (runs ? runs+'실점 · '+game.g.us+':'+(game.g.them+inn.runs) : inn.outs+'아웃') + (exTxt ? ' · '+exTxt : '');
       if(status==='win'||status==='lose'||status==='draw'){
@@ -2989,6 +3027,17 @@ return {
     updateHUD();
   }
   const pct=(v)=>Math.round(v*100)+'%';
+  const GRADE_TXT={ best:'◎ 좋은 선택', good:'○ 괜찮음', meh:'△ 아쉬움', bad:'✕ 나쁜 선택' };
+  function availablePitches(){ return game.mode==='practice' ? E.PITCH_TYPES : myPitcher().rep; }
+  // 내가 던진 공 한 줄: 등급 · 더 좋았던 공 · 실투
+  function gradeLine(g, rec){
+    if(!g) return '';
+    let t='내 공 '+GRADE_TXT[g.grade]+' ('+g.rank+'/'+g.total+'위)';
+    const b=g.best;
+    if(g.grade!=='best') t+=' · 더 좋았던 공: '+PT_KO[b.pitchType]+' '+zoneName(b.zone);
+    if(rec && rec.aim!==rec.zone) t+=' · 실투: '+zoneName(rec.aim)+' 노림 → '+zoneName(rec.zone);
+    return '<span class="grade '+g.grade+'">'+t+'</span>';
+  }
   function probLine(p){ return '헛스윙 '+pct(p.whiff)+' · 안타 '+pct(p.single+p.double+p.hr); }
   // 효과를 한 줄로. short=true 면 게임 배너용으로 짧게
   function effectReason(ef, short){
@@ -3016,7 +3065,8 @@ return {
       const d=Math.round((r.p.whiff-r.p0.whiff)*100);
       sub='앞 공 효과: 헛스윙 '+pct(r.p0.whiff)+' → '+pct(r.p.whiff)+' ('+(d>=0?'+':'')+d+') · '+(effectReason(ef)||'효과 거의 없음');
     }
-    showMsg(main, sub, '#aab2c0');
+    const g=E.evaluatePick(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, availablePitches(), {ai:false, prev:game.prev||null, judge:absJudge});
+    showMsg(main+gradeLine(g,null), sub, '#aab2c0');
   }
   function onArrivePractice(rec, main, sub0){
     let text=main;
@@ -3028,11 +3078,9 @@ return {
     }
     if(pr) lines.push('이 공 '+probLine(pr.p)+(pr.effect.Dc!==undefined?' (효과 전 헛스윙 '+pct(pr.p0.whiff)+')':''));
     const why=effectReason(ef);
+    if(rec.outcome){ text=RESULT_TXT[rec.outcome][0]+' — 새 타석'; game.pa=E.startPA(curHands()); }
+    text+=gradeLine(game.grade, rec);
     if(why) text+='<span class="eff">'+why+'</span>';
-    if(rec.outcome){
-      text=RESULT_TXT[rec.outcome][0]+' — 새 타석'+(why?'<span class="eff">'+why+'</span>':'');
-      game.pa=E.startPA(curHands());
-    }
     showMsg(text, lines.join(' · '), RESULT_COL[rec.outcome||rec.result]);
     game.phase='ready';
     updateHUD();
