@@ -1,4 +1,4 @@
-// 구종별 평균 속임 효과(D) — 실제 사용 빈도대로 던졌을 때
+// 구종별 평균 속임 효과(D) — 실제 사용 빈도대로 던졌을 때. 결과를 engine.js DECEPT.base 에 넣는다 (확률표가 바뀌면 다시 돌릴 것)
 const fs=require('fs'), path=require('path');
 const E=require('./engine');
 const t=E.buildTable(JSON.parse(fs.readFileSync(path.join(__dirname,'../data/out/pitch_table.json'),'utf8')));
