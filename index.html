@@ -170,7 +170,17 @@
     backdrop-filter:blur(4px); font-size:13px; font-weight:700; line-height:1.5; min-width:118px;
   }
   #game-hud .gh-inn { color:#7a8290; font-size:11px; font-weight:600; }
-  #game-hud .gh-menu { float:right; margin-left:8px; font-size:13px; color:#8a93a3; cursor:pointer; }
+  #game-hud .gh-menu {
+    float:right; margin-left:10px; margin-top:-2px; padding:3px 9px; border-radius:9px;
+    font-size:12px; font-weight:800; color:#dfe3e8; background:#1b2433; border:1.5px solid #3a4660; cursor:pointer;
+  }
+  #game-hud .gh-menu:active { transform:scale(0.95); }
+  #game-setup .su-btns { margin-top:auto; display:flex; gap:8px; }
+  #game-setup .su-btns button { flex:1 1 0; }
+  #game-setup button#game-resume {
+    display:none; font-size:15px; font-weight:800; padding:13px 0; border-radius:13px;
+    background:transparent; border:1.5px solid #3a4660; color:#dfe3e8;
+  }
   #game-hud.practice .gh-row, #game-hud.practice .gh-score { display:none; }
   #game-msg .eff { display:block; font-size:10.5px; font-weight:700; color:#ffd23b; margin-top:2px; letter-spacing:0; }
   #game-hud .gh-score { font-size:18px; font-weight:800; letter-spacing:0.04em; margin-left:6px; }
@@ -229,7 +239,7 @@
   #game-setup .roster small { color:#5e6675; font-size:9px; }
   #game-setup .roster b { color:#dfe3e8; font-weight:700; }
   #game-setup button#game-go {
-    margin-top:auto; flex:0 0 auto; font-size:17px; font-weight:800; padding:13px 0; border-radius:13px; border:none; background:#fff; color:#000;
+    flex:1 1 0; font-size:17px; font-weight:800; padding:13px 0; border-radius:13px; border:none; background:#fff; color:#000;
   }
   #game-end .ge-rec { font-size:12px; color:#7a8290; font-weight:600; }
   #game-end button#game-team { margin-top:2px; font-size:13px; font-weight:700; padding:9px 18px; border-radius:11px; background:transparent; border:1.5px solid #3a4660; color:#aab2c0; }
@@ -275,7 +285,7 @@
     </div>
     <div id="matchup"></div>
     <div id="game-hud">
-      <div><span class="gh-inn">9회말</span><span class="gh-score">3 : 2</span><span class="gh-menu" id="gh-menu">⚙</span></div>
+      <div><span class="gh-inn">9회말</span><span class="gh-score">3 : 2</span><span class="gh-menu" id="gh-menu">← 선택</span></div>
       <div class="gh-row">
         <span class="gh-bases"><i class="b2"></i><i class="b1"></i><i class="b3"></i></span>
         <span class="gh-outs">1아웃</span>
@@ -292,7 +302,7 @@
       <div class="lb opp">상대 팀</div><div class="row opp" id="su-opp"></div>
       </div>
       <div class="roster" id="su-roster"></div>
-      <button id="game-go">플레이 볼</button>
+      <div class="su-btns"><button id="game-resume">← 이어서 하기</button><button id="game-go">플레이 볼</button></div>
     </div>
     <div id="game-end">
       <div class="ge-title"></div>
@@ -2478,7 +2488,7 @@ return {
     mk($('su-mode'), [{html:'게임 <small>한 이닝 막기</small>', on:setup.mode!=='practice'},{html:'연습 <small>공 효과 보기</small>', on:setup.mode==='practice'}], null, (i)=>{ setup.mode = i ? 'practice' : 'game'; });
     const prac = setup.mode==='practice';
     document.querySelector('#game-setup .su-teams').style.display = prac ? 'none' : 'block';
-    $('game-go').textContent = prac ? '연습 시작' : '플레이 볼';
+    $('game-go').textContent = prac ? '새 연습' : '새 게임';
     if(prac){ $('su-roster').innerHTML='<b>연습</b> — 점수·승패 없음, 타자 노림 없음. 10구종 다 던질 수 있고 투수·타자 좌우는 화면 버튼으로 바꿈. 조준하면 던지기 전에 확률이, 던진 뒤엔 앞 공과 궤적 비교가 보여요.'; return; }
     mk($('su-my'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.my})), null, (i)=>{ setup.my=E.TEAMS[i].key; setup.pitcher=0; });
     const my=teamOf(setup.my);
@@ -2487,10 +2497,20 @@ return {
     const opp=teamOf(setup.opp);
     $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':b.hand==='S'?'스':'우')+'</small>').join(' · ');
   }
-  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; $('hand-wrap').style.display='none'; }
+  function showSetup(){
+    // 진행 중인 판이 있으면 "이어서 하기"
+    $('game-resume').style.display = (game.inning && game.phase!=='over') ? 'block' : 'none';
+    $('game-resume').textContent = game.mode==='practice' ? '← 연습 계속' : '← 이어서 하기';
+    renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; $('hand-wrap').style.display='none'; }
   function hideSetup(){ $('game-setup').style.display='none'; $('game-controls').style.display='flex'; }
   $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); if(setup.mode==='practice') newPractice(); else newGame(); });
-  $('gh-menu').addEventListener('click', ()=>{ if(game.phase==='flying') return; game.inning=null; gameAim=null; game.aimZone=null; showSetup(); });
+  $('gh-menu').addEventListener('click', ()=>{ if(game.phase==='flying') return; showSetup(); });
+  $('game-resume').addEventListener('click', ()=>{
+    hideSetup();
+    if(game.mode==='practice'){ $('hand-wrap').style.display='flex'; $('bat-btn').style.display='block'; }
+    cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD();
+    if($('game-msg').innerHTML) $('game-msg').style.display='flex';
+  });
 
   const RESULT_TXT={
     ball:['볼',''], called:['스트라이크','루킹'], whiff:['스트라이크','헛스윙'], foul:['파울',''],
