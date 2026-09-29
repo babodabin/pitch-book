@@ -1644,6 +1644,7 @@ return {
     ctx.stroke();
     // 투수 (1.85m, 같은 자)
     drawPitcher(t);
+    if(view==='game') drawRunners();   // 게임: 베이스와 주자
     // 잔디 줄 (원근 간격)
     ctx.strokeStyle='rgba(255,255,255,0.05)';
     ctx.lineWidth=1.5;
@@ -2925,6 +2926,40 @@ return {
     showMsg(text, subText, col);
     game.phase='ready';
     updateHUD();
+  }
+
+  // ── 베이스·주자: 실제 거리(27m)면 화면 밖이라 1·3루는 화면 가장자리로 당겨 그림 ──
+  function drawRunners(){
+    if(game.mode==='practice' || !game.inning) return;
+    const on=game.inning.bases;   // [1루, 2루, 3루]
+    const scaleAt=(d)=>proj(0,0,d).s;
+    const d13=19, d2=34;       // 1·3루는 투수와 비슷한 거리로 (크기가 맞게)
+    const x13=(W*0.40)/scaleAt(d13);            // 화면 폭의 40% 지점
+    const spots=[
+      {bx: x13, d:d13, lead:-0.9},               // 1루: 오른쪽, 2루 쪽(안쪽)으로 리드
+      {bx: 0,   d:d2,  lead:-2.4},               // 2루: 투수 뒤, 3루 쪽으로 리드 (투수와 안 겹치게)
+      {bx:-x13, d:d13, lead: 0.9},               // 3루: 왼쪽, 홈 쪽(안쪽)으로 리드
+    ];
+    ctx.save();
+    spots.forEach((sp,i)=>{
+      // 베이스 (흰 마름모)
+      const c=proj(sp.bx,0,sp.d), s2=0.38*c.s;
+      ctx.fillStyle='rgba(245,245,240,0.85)';
+      ctx.beginPath(); ctx.moveTo(c.x,c.y-s2*0.35); ctx.lineTo(c.x+s2,c.y); ctx.lineTo(c.x,c.y+s2*0.35); ctx.lineTo(c.x-s2,c.y); ctx.closePath(); ctx.fill();
+      if(!on[i]) return;
+      // 주자 (리드한 자리)
+      const f=proj(sp.bx+sp.lead,0,sp.d), hd=proj(sp.bx+sp.lead,1.8,sp.d);
+      const h=f.y-hd.y, x=f.x, y=f.y;
+      ctx.strokeStyle='rgba(255,130,130,0.95)'; ctx.fillStyle='rgba(255,130,130,0.95)';
+      ctx.lineWidth=Math.max(1.5,h*0.09); ctx.lineCap='round';
+      ctx.beginPath(); ctx.arc(x,y-h*0.86,Math.max(2,h*0.11),0,Math.PI*2); ctx.fill();          // 머리
+      ctx.beginPath(); ctx.moveTo(x,y-h*0.74); ctx.lineTo(x,y-h*0.36); ctx.stroke();            // 몸
+      ctx.beginPath(); ctx.moveTo(x,y-h*0.36); ctx.lineTo(x-h*0.16,y); ctx.moveTo(x,y-h*0.36); ctx.lineTo(x+h*0.16,y); ctx.stroke(); // 다리 (벌려 리드 자세)
+      ctx.beginPath(); ctx.moveTo(x,y-h*0.64); ctx.lineTo(x-h*0.2,y-h*0.46); ctx.moveTo(x,y-h*0.64); ctx.lineTo(x+h*0.2,y-h*0.46); ctx.stroke(); // 팔
+      ctx.fillStyle='rgba(255,180,180,0.9)'; ctx.font='700 '+Math.max(9,Math.min(11,h*0.28))+'px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText((i+1)+'루', x, y+Math.max(10,h*0.3));
+    });
+    ctx.restore();
   }
 
   // ═════ 연습 모드: 앞 공과 비교해 이 공이 타자에게 어떻게 보였나 ═════
