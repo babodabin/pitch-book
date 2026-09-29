@@ -170,6 +170,9 @@
     backdrop-filter:blur(4px); font-size:13px; font-weight:700; line-height:1.5; min-width:118px;
   }
   #game-hud .gh-inn { color:#7a8290; font-size:11px; font-weight:600; }
+  #game-hud .gh-menu { float:right; margin-left:8px; font-size:13px; color:#8a93a3; cursor:pointer; }
+  #game-hud.practice .gh-row, #game-hud.practice .gh-score { display:none; }
+  #game-msg .eff { display:block; font-size:10.5px; font-weight:700; color:#ffd23b; margin-top:2px; letter-spacing:0; }
   #game-hud .gh-score { font-size:18px; font-weight:800; letter-spacing:0.04em; margin-left:6px; }
   #game-hud .gh-row { display:flex; align-items:center; gap:8px; }
   #game-hud .gh-bases { position:relative; width:30px; height:22px; flex:0 0 auto; }
@@ -272,7 +275,7 @@
     </div>
     <div id="matchup"></div>
     <div id="game-hud">
-      <div><span class="gh-inn">9회말</span><span class="gh-score">3 : 2</span></div>
+      <div><span class="gh-inn">9회말</span><span class="gh-score">3 : 2</span><span class="gh-menu" id="gh-menu">⚙</span></div>
       <div class="gh-row">
         <span class="gh-bases"><i class="b2"></i><i class="b1"></i><i class="b3"></i></span>
         <span class="gh-outs">1아웃</span>
@@ -282,9 +285,12 @@
     </div>
     <div id="game-setup">
       <h3>MATCHUP</h3>
+      <div class="lb">모드</div><div class="row" id="su-mode"></div>
+      <div class="su-teams">
       <div class="lb">내 팀</div><div class="row" id="su-my"></div>
       <div class="lb">투수 (나)</div><div class="row" id="su-p"></div>
       <div class="lb opp">상대 팀</div><div class="row opp" id="su-opp"></div>
+      </div>
       <div class="roster" id="su-roster"></div>
       <button id="game-go">플레이 볼</button>
     </div>
@@ -733,6 +739,63 @@ function applyExpectation(p, m, m0, strength) {
   return q;
 }
 
+// ---------- 구종 물리 · 속이기 효과 ----------
+// 도감 궤적과 같은 값. v km/h, bx 좌우 변화 m (+ = 팔쪽, - = 글러브쪽), mv 상하 변화 m (+ = 덜 떨어짐), shape = 꺾이는 시점
+const PHYS = {
+  FF: { v: 150, bx: 0,     mv: 0.40,  shape: 'gradual' },
+  SI: { v: 144, bx: 0.28,  mv: 0.10,  shape: 'gradual' },
+  FC: { v: 143, bx: -0.14, mv: 0.30,  shape: 'late' },
+  SL: { v: 135, bx: -0.35, mv: 0.05,  shape: 'late' },
+  ST: { v: 125, bx: -0.55, mv: 0.10,  shape: 'gradual' },
+  CU: { v: 118, bx: -0.28, mv: -0.45, shape: 'early' },
+  KC: { v: 128, bx: -0.22, mv: -0.48, shape: 'early' },
+  CH: { v: 128, bx: 0.20,  mv: 0.12,  shape: 'gradual' },
+  FS: { v: 138, bx: 0,     mv: -0.05, shape: 'late' },
+  SV: { v: 130, bx: -0.40, mv: -0.28, shape: 'gradual' },
+};
+const REL = { d: 17.0, h: 1.75, x: 0.45 };   // 릴리스 → 플레이트 거리, 높이, 좌우 (도감과 같음)
+function moveExp(shape) { return shape === 'late' ? 3.65 : shape === 'early' ? 1.38 : 2.05; }
+// 투수 손 pH 로 (x,z) 에 도착한 공의 비행 진행 tN(0~1) 위치. x 는 포수 시점 (+ = 1루쪽)
+function pitchPos(code, pH, x, z, tN) {
+  const p = PHYS[code], sgn = pH === 'L' ? -1 : 1, T = REL.d / (p.v / 3.6), gd = 0.5 * 9.81 * T * T;
+  const relX = -REL.x * sgn, b = -p.bx * sgn;          // 우투수 팔쪽 = 화면 왼쪽
+  const m = Math.pow(tN, moveExp(p.shape));
+  return { x: relX + (x - relX) * tN + b * (m - tN), z: REL.h + (z - REL.h + gd) * tN - gd * tN * tN + p.mv * (m - tN) };
+}
+// 타자에게서 멀어지는 좌우 변화 (m, + = 멀어짐). 같은 손이면 글러브쪽이, 반대 손이면 팔쪽이 멀어지는 쪽
+function awayBreak(code, pH, bH) { const bx = PHYS[code].bx; return pH === bH ? -bx : bx; }
+
+const DECEPT = {
+  decisionM: 7.0,     // 타자가 휘두를지 정하는 지점 (플레이트 앞 m)
+  timingFull: 30,     // 앞 공보다 이만큼 느리면 타이밍 효과 최대 (km/h). 빨라지면 절반만
+  tunnelSame: 0.15,   // 판단 지점에서 앞 공과 이보다 가까우면 "같은 공처럼 보임" (m)
+  tunnelSplit: 0.30,  // 그러다 도착점이 이만큼 벌어지면 터널 효과 최대 (m)
+  wTiming: 1.0, wTunnel: 0.8,
+  strength: 1.0,
+  effect: { take: -0.25, whiff: 0.75, foul: 0.1, out: 0.15, single: -0.45, double: -0.6, hr: -0.8 },
+  // 구종별 평균 효과 — 실측 확률표에 이미 "평균적인 볼배합"이 들어 있으므로 빼고 쓴다 (sim 으로 구함)
+  base: {"FF":0.349,"SI":0.336,"FC":0.339,"SL":0.449,"ST":0.678,"CU":0.863,"KC":0.602,"CH":0.589,"FS":0.411,"SV":0.565},
+};
+// 앞 공(prev)과 이번 공(cur)을 타자 눈으로 비교. prev/cur = { pitchType, x, z }
+function deception(prev, cur, pH) {
+  const dv = PHYS[prev.pitchType].v - PHYS[cur.pitchType].v;
+  const timing = dv > 0 ? Math.min(1, dv / DECEPT.timingFull) : Math.min(1, -dv / DECEPT.timingFull) * 0.5;
+  const tDec = 1 - DECEPT.decisionM / REL.d;
+  const a = pitchPos(prev.pitchType, pH, prev.x, prev.z, tDec), b = pitchPos(cur.pitchType, pH, cur.x, cur.z, tDec);
+  const sepDec = Math.hypot(a.x - b.x, a.z - b.z);
+  const sepPlate = Math.hypot(prev.x - cur.x, prev.z - cur.z);
+  const look = sepDec <= DECEPT.tunnelSame ? 1 : Math.max(0, 1 - (sepDec - DECEPT.tunnelSame) / 0.2);
+  const tunnel = look * Math.max(0, Math.min(1, (sepPlate - sepDec) / DECEPT.tunnelSplit));
+  const D = DECEPT.wTiming * timing + DECEPT.wTunnel * tunnel;
+  return { dv, timing, sepDec, sepPlate, tunnel, D };
+}
+function applyDeception(p, Dc) {
+  const q = {}; let s = 0;
+  for (const r of PROB_KEYS) { q[r] = p[r] * Math.exp(DECEPT.effect[r] * Dc * DECEPT.strength); s += q[r]; }
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 // ---------- 타석 (투구 하나씩) ----------
 function startPA(hands) {
   return { balls: 0, strikes: 0, hands, history: [], outcome: null };
@@ -743,14 +806,12 @@ function startPA(hands) {
 //       judge(x, z) → true=스트라이크 : 안 휘두른 공의 볼/루킹을 가르는 판정 (도감 ABS를 넘겨줌)
 //       ai (기본 true) 타자 노림 켜기, scout: 이 이닝의 투구 기록 배열 (넘기면 여기에 쌓임), expect: 노림을 직접 지정
 // 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome, expect, match, swung }  outcome 은 타석이 끝났을 때만
-function throwPitch(table, st, pick, opts = {}) {
+// 한 공의 결과 확률 (뽑기 전). land = 실제 도착 {zone,x,z}. 반환 { p, p0, expect, match, effect }
+//   p0 = 앞 공 효과를 빼고 계산한 확률 (연습 모드에서 "효과 전 → 후" 비교용)
+//   opts.prev = 타자가 바로 앞에 본 공 {pitchType,x,z} (없으면 이번 타석 직전 공)
+function pitchProbs(table, st, pick, land, opts = {}) {
   const rng = opts.rng || Math.random;
-  const wobble = opts.wobble !== false;
   const countAdjust = opts.countAdjust !== false && table.countAdj;
-
-  const aimPt = zoneTarget(pick.zone);
-  const land = wobble ? applyWobble(pick.pitchType, pick.zone, rng, opts.wobbleScale)
-                      : { zone: pick.zone, x: aimPt.x, z: aimPt.z };
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
@@ -764,6 +825,26 @@ function throwPitch(table, st, pick, opts = {}) {
   }
   if (opts.batter) p = applyBatter(p, opts.batter);
   p = applyDifficulty(p);
+  const p0 = p;
+  const pH = st.hands[0], bH = st.hands[1];
+  const effect = { away: awayBreak(pick.pitchType, pH, bH), v: PHYS[pick.pitchType].v };
+  const prev = opts.prev !== undefined ? opts.prev : st.history[st.history.length - 1];
+  if (prev && opts.deceive !== false) {
+    Object.assign(effect, deception(prev, { pitchType: pick.pitchType, x: land.x, z: land.z }, pH));
+    effect.prev = prev.pitchType; effect.prevV = PHYS[prev.pitchType].v;
+    effect.Dc = effect.D - (DECEPT.base[pick.pitchType] || 0);
+    p = applyDeception(p, effect.Dc);
+  }
+  return { p, p0, expect, match, effect };
+}
+
+function throwPitch(table, st, pick, opts = {}) {
+  const rng = opts.rng || Math.random;
+  const wobble = opts.wobble !== false;
+  const aimPt = zoneTarget(pick.zone);
+  const land = wobble ? applyWobble(pick.pitchType, pick.zone, rng, opts.wobbleScale)
+                      : { zone: pick.zone, x: aimPt.x, z: aimPt.z };
+  const { p, expect, match, effect } = pitchProbs(table, st, pick, land, opts);
   let result = sampleResult(p, rng);
   if (result === 'take') {
     const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
@@ -772,7 +853,7 @@ function throwPitch(table, st, pick, opts = {}) {
 
   const rec = { pitchType: pick.pitchType, aim: pick.zone, zone: land.zone, x: land.x, z: land.z,
                 result, count: `${st.balls}-${st.strikes}`, outcome: null,
-                expect, match, swung: result !== 'ball' && result !== 'called' };
+                expect, match, effect, swung: result !== 'ball' && result !== 'called' };
 
   if (IN_PLAY.has(result)) rec.outcome = result;
   else if (result === 'ball') { st.balls++; if (st.balls === 4) rec.outcome = 'walk'; }
@@ -963,6 +1044,7 @@ return {
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, batSide, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
@@ -1291,12 +1373,14 @@ return {
     lefty=!lefty;
     updateMatchup();
     updateInfo();
+    if(view==='game'){ if(typeof onPracticeHands==='function') onPracticeHands(); return; }
     doThrow(mode);
   });
   $('bat-btn').addEventListener('click', ()=>{
     batLefty=!batLefty;
     updateMatchup();
     updateInfo();
+    if(view==='game'){ if(typeof onPracticeHands==='function') onPracticeHands(); return; }
     doThrow(mode);
   });
 
@@ -1345,9 +1429,11 @@ return {
     const T=RELEASE_D/(p.v/3.6);
     const t=tN*T;
     const d=RELEASE_D*(1-tN);
-    const ax=2*(p.bx*sgn)/(T*T);
+    // bx·tx 는 "투수 기준" 값(+ = 팔쪽). 우투수 팔쪽은 포수 시점 화면 왼쪽(3루쪽)이라 부호를 뒤집는다
+    const bxs=-(p.bx||0)*sgn;
+    const ax=2*bxs/(T*T);
     const ay=2*(p.mv||0)/(T*T) - G;
-    let tgtX = p.ax!==undefined ? p.ax : p.tx;
+    let tgtX = p.ax!==undefined ? p.ax : -p.tx;
     let tgtY = p.ay!==undefined ? p.ay : p.ty;
     if(view==='front' && dexAim && p===cur){ tgtX=dexAim.x*sgn; tgtY=dexAim.z; }   // sgn 은 아래서 다시 곱함
     const v0x=(tgtX*sgn - relX)/T - 0.5*ax*T;
@@ -1361,7 +1447,7 @@ return {
     else if(p.shape==='early') moveT=Math.pow(tN,1.38);
     else if(p.shape==='gradual') moveT=Math.pow(tN,2.05);
 
-    let X=X0+(p.bx*sgn)*moveT;
+    let X=X0+bxs*moveT;
     let Y=Y0+(p.mv||0)*moveT;
     if(p.shape==='knuckle'){
       const wb=knWobble(tN, seed);
@@ -1454,8 +1540,10 @@ return {
       const scale=Math.min(2.3,Math.max(1.25,22/len));
       drawArrow(a.x,a.y,a.x+dx*scale,a.y+dy*scale,cur.color);
       ctx.fillStyle=cur.color; ctx.font='800 11px -apple-system,sans-serif';
-      ctx.textAlign=dx>=0?'left':'right';
-      ctx.fillText('회전이 만든 이동',a.x+dx*scale+(dx>=0?7:-7),a.y+dy*scale-7);
+      const lbl='회전이 만든 이동', lw=ctx.measureText(lbl).width;
+      let lx=a.x+dx*scale+(dx>=0?7:-7-lw); lx=Math.max(6, Math.min(W-lw-6, lx));   // 화면 밖으로 안 나가게
+      ctx.textAlign='left';
+      ctx.fillText(lbl,lx,a.y+dy*scale-7);
     }
 
     // 변화가 시작되는 위치를 링으로 고정해, 어디서 갈라지는지 기억하게 한다.
@@ -1751,7 +1839,7 @@ return {
   function drawMitt(){
     const sgn=lefty?-1:1;
     if(view==='game'){ drawAimMark(); return; } // 게임: 미트 대신 조준 표시
-    const m = (view==='front' && dexAim) ? proj(dexAim.x, dexAim.z, 0.55) : proj(cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
+    const m = (view==='front' && dexAim) ? proj(dexAim.x, dexAim.z, 0.55) : proj(-cur.tx*sgn, cur.ty, 0.55);   // 존 뒤에서 타깃을 대는 위치
     const r=0.125*m.s;
     ctx.save();
     ctx.globalAlpha=0.45;
@@ -1974,8 +2062,8 @@ return {
     ctx.setLineDash([5,5]);
     ctx.beginPath(); ctx.moveTo(xL,centerY); ctx.lineTo(xR,centerY); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle='rgba(255,255,255,0.36)'; ctx.font='700 10px -apple-system,sans-serif';
-    ctx.textAlign='left'; ctx.fillText(lefty?'팔쪽':'글러브쪽',bot.x+8,centerY-bot.h*0.23);
-    ctx.fillText(lefty?'글러브쪽':'팔쪽',bot.x+8,centerY+bot.h*0.23);
+    ctx.textAlign='left'; ctx.fillText(lefty?'글러브쪽':'팔쪽',bot.x+8,centerY-bot.h*0.23);
+    ctx.fillText(lefty?'팔쪽':'글러브쪽',bot.x+8,centerY+bot.h*0.23);
     ctx.textAlign='center'; ctx.fillText('투수  →  포수',bot.x+bot.w/2,bot.y+35);
 
     function samplePath(p, useBase, mapper, color, alpha, dashed, width){
@@ -2372,20 +2460,26 @@ return {
 
   // 팀·투수 선택 (localStorage 에 기억). LINEUP = 고른 상대 팀 타자 9명
   const SETUP_KEY='pb_inning_setup';
-  const setup = Object.assign({ my:'kbo_all', pitcher:0, opp:'y2010' }, (()=>{ try{ return JSON.parse(localStorage.getItem(SETUP_KEY)||'{}'); }catch(e){ return {}; } })());
+  const setup = Object.assign({ mode:'game', my:'kbo_all', pitcher:0, opp:'y2010' }, (()=>{ try{ return JSON.parse(localStorage.getItem(SETUP_KEY)||'{}'); }catch(e){ return {}; } })());
   const teamOf = (k)=> (E ? E.TEAMS.find(t=>t.key===k) : null) || (E ? E.TEAMS[0] : null);
   let LINEUP = E ? teamOf(setup.opp).batters : [];
   function myPitcher(){ const t=teamOf(setup.my); const p=t.pitchers[Math.min(setup.pitcher, t.pitchers.length-1)]; return { name:p[0], hand:p[1], rep:p[2]||E.PITCH_TYPES, team:t }; }
   function applySetup(){
     LINEUP = teamOf(setup.opp).batters;
-    const p=myPitcher(); lefty = p.hand==='L';
-    // 이 투수의 구종만 칩에 남김
-    for(const [code,c] of Object.entries(gchips)) c.style.display = p.rep.includes(code) ? 'flex' : 'none';
-    if(!p.rep.includes(gamePitch)){ gamePitch=p.rep[0]; Object.values(gchips).forEach(x=>x.classList.remove('on')); gchips[gamePitch].classList.add('on'); }
+    const p=myPitcher();
+    const rep = setup.mode==='practice' ? E.PITCH_TYPES : p.rep;      // 연습은 10구종 전부
+    if(setup.mode!=='practice') lefty = p.hand==='L';
+    for(const [code,c] of Object.entries(gchips)) c.style.display = rep.includes(code) ? 'flex' : 'none';
+    if(!rep.includes(gamePitch)){ gamePitch=rep[0]; Object.values(gchips).forEach(x=>x.classList.remove('on')); gchips[gamePitch].classList.add('on'); }
     try{ localStorage.setItem(SETUP_KEY, JSON.stringify(setup)); }catch(e){}
   }
   function renderSetup(){
     const mk=(row, items, onKey, onClick)=>{ row.innerHTML=''; items.forEach((it,i)=>{ const c=document.createElement('div'); c.className='t-chip'+(it.on?' on':''); c.innerHTML=it.html; c.addEventListener('click',()=>{ onClick(i); renderSetup(); }); row.appendChild(c); }); };
+    mk($('su-mode'), [{html:'게임 <small>한 이닝 막기</small>', on:setup.mode!=='practice'},{html:'연습 <small>공 효과 보기</small>', on:setup.mode==='practice'}], null, (i)=>{ setup.mode = i ? 'practice' : 'game'; });
+    const prac = setup.mode==='practice';
+    document.querySelector('#game-setup .su-teams').style.display = prac ? 'none' : 'block';
+    $('game-go').textContent = prac ? '연습 시작' : '플레이 볼';
+    if(prac){ $('su-roster').innerHTML='<b>연습</b> — 점수·승패 없음, 타자 노림 없음. 10구종 다 던질 수 있고 투수·타자 좌우는 화면 버튼으로 바꿈. 조준하면 던지기 전에 확률이, 던진 뒤엔 앞 공과 궤적 비교가 보여요.'; return; }
     mk($('su-my'), E.TEAMS.map(t=>({html:t.name, on:t.key===setup.my})), null, (i)=>{ setup.my=E.TEAMS[i].key; setup.pitcher=0; });
     const my=teamOf(setup.my);
     mk($('su-p'), my.pitchers.map((p,i)=>({html:p[0]+'<small>'+(p[1]==='L'?'좌':'우')+' · '+p[2].map(c=>PT_KO[c]).join('·')+'</small>', on:i===Math.min(setup.pitcher,my.pitchers.length-1)})), null, (i)=>{ setup.pitcher=i; });
@@ -2393,9 +2487,10 @@ return {
     const opp=teamOf(setup.opp);
     $('su-roster').innerHTML = '<b>'+opp.name+'</b> — '+opp.batters.map((b,i)=>(i+1)+' '+b.name+'<small>'+(b.hand==='L'?'좌':b.hand==='S'?'스':'우')+'</small>').join(' · ');
   }
-  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; }
+  function showSetup(){ renderSetup(); $('game-setup').style.display='flex'; $('game-end').style.display='none'; $('game-msg').style.display='none'; $('game-controls').style.display='none'; $('hand-wrap').style.display='none'; }
   function hideSetup(){ $('game-setup').style.display='none'; $('game-controls').style.display='flex'; }
-  $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); newGame(); });
+  $('game-go').addEventListener('click', ()=>{ applySetup(); hideSetup(); if(setup.mode==='practice') newPractice(); else newGame(); });
+  $('gh-menu').addEventListener('click', ()=>{ if(game.phase==='flying') return; game.inning=null; gameAim=null; game.aimZone=null; showSetup(); });
 
   const RESULT_TXT={
     ball:['볼',''], called:['스트라이크','루킹'], whiff:['스트라이크','헛스윙'], foul:['파울',''],
@@ -2433,6 +2528,7 @@ return {
       Object.values(gchips).forEach(x=>x.classList.remove('on'));
       c.classList.add('on');
       if(game.phase!=='flying'){ cur=p; updateInfo(); }
+      if(game.mode==='practice' && game.aimZone && game.phase==='ready') showPrediction(game.aimZone);
     });
     gbar.appendChild(c); gchips[code]=c;
   });
@@ -2445,7 +2541,7 @@ return {
   }
 
   function batHand(i){ return E.batSide(LINEUP[i%9].hand, lefty?'L':'R'); }
-  function curHands(){ return (lefty?'L':'R') + batHand(game.batterIdx); }
+  function curHands(){ return (lefty?'L':'R') + (game.mode==='practice' ? (batLefty?'L':'R') : batHand(game.batterIdx)); }
 
   function enterGame(){
     if(view!=='game') return;
@@ -2456,6 +2552,7 @@ return {
     if(!game.inning){ applySetup(); showSetup(); }
     else {
       cur=GAME_PITCH_MAP[gamePitch]; updateInfo(); updateHUD();
+      if(game.mode==='practice'){ $('hand-wrap').style.display='flex'; $('bat-btn').style.display='block'; }
       if(game.phase==='over') showEnd();
       else if($('game-msg').innerHTML) $('game-msg').style.display='flex';
     }
@@ -2470,6 +2567,8 @@ return {
   }
 
   function newGame(){
+    game.mode='game'; $('game-hud').classList.remove('practice'); $('hand-wrap').style.display='none';
+    game.prev=null; game.ghost=null;
     game.g=E.startGame();
     game.inning=game.g.inn;
     game.scout=[];
@@ -2501,6 +2600,16 @@ return {
   function updateHUD(){
     const inn=game.inning, pa=game.pa;
     if(!inn) return;
+    if(game.mode==='practice'){
+      document.querySelector('#game-hud .gh-inn').textContent='연습';
+      let h='B ';
+      for(let i=0;i<3;i++) h+='<b class="b'+(i<pa.balls?' on':'')+'"></b>';
+      h+='&nbsp; S ';
+      for(let i=0;i<2;i++) h+='<b class="s'+(i<pa.strikes?' on':'')+'"></b>';
+      document.querySelector('#game-hud .gh-count').innerHTML=h;
+      document.querySelector('#game-hud .gh-bat').textContent=(lefty?'좌투':'우투')+' vs '+(batLefty?'좌타':'우타')+(game.prev?' · 앞 공 '+PT_KO[game.prev.pitchType]:' · 첫 공');
+      return;
+    }
     document.querySelector('#game-hud .gh-inn').textContent=inn.inning+'회말';
     document.querySelector('#game-hud .gh-score').textContent=game.g.us+' : '+(game.g.them+inn.runs);
     const b=document.querySelectorAll('#game-hud .gh-bases i');
@@ -2545,6 +2654,7 @@ return {
     const aim=E.zoneTarget(zone);
     gameAim={x:aim.x, z:aim.z};
     $('throw-btn').disabled=false;
+    if(game.mode==='practice') showPrediction(zone);
   });
   $('throw-btn').addEventListener('click', ()=>{
     if(view!=='game' || game.phase!=='ready' || !game.aimZone) return;
@@ -2554,13 +2664,19 @@ return {
   function throwGamePitch(zone){
     const base=GAME_PITCH_MAP[gamePitch];
     game.pa.hands=curHands();
-    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {judge:absJudge, scout:game.scout, batter:LINEUP[game.batterIdx%9].type});
+    const prac = game.mode==='practice';
+    if(prac) game.ghost = game.prev ? Object.assign({}, game.prev) : null;   // 앞 공 궤적을 흐리게 겹쳐 그림
+    const opts = prac ? {judge:absJudge, ai:false, prev:game.prev||null}
+                      : {judge:absJudge, scout:game.scout, batter:LINEUP[game.batterIdx%9].type};
+    if(prac){ const aimPt=E.zoneTarget(zone); game.pred=E.pitchProbs(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {zone:zone, x:aimPt.x, z:aimPt.z}, opts); }
+    const rec=E.throwPitch(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, opts);
+    if(prac) game.prev={pitchType:rec.pitchType, x:rec.x, z:rec.z};
     const sgn=lefty?-1:1;
     const aim=E.zoneTarget(zone);
     gameAim={x:aim.x, z:aim.z};
     // 노림(tx/ty)은 조준 표시, 실제 도달(ax/ay)은 실투가 반영된 점. sgn 은 ballWorldFor 가 다시 곱하므로 미리 나눔
     cur=Object.assign({}, base, {tx:aim.x*sgn, ty:aim.z, ax:rec.x*sgn, ay:rec.z});
-    game.rec=rec; rec.side = batLefty ? 1 : -1; rec.hands = game.pa.hands; rec.batter = LINEUP[game.batterIdx%9].name;
+    game.rec=rec; rec.side = batLefty ? 1 : -1; rec.hands = game.pa.hands; rec.batter = prac ? '' : LINEUP[game.batterIdx%9].name;
     game.phase='flying';
     game.aimZone=null;
     $('throw-btn').disabled=true;
@@ -2584,6 +2700,7 @@ return {
   // 매 프레임 (drawFront 뒤에 호출)
   function gameFrame(){
     const rec=game.rec;
+    if(game.mode==='practice' && game.ghost && rec) drawGhost();
     if(game.phase==='ready' || game.phase==='flying') drawOuterZones();
     drawFarGrid();
     if(game.phase==='flying' && rec){
@@ -2752,11 +2869,14 @@ return {
     if(!path.length) pushPath(ballWorld(1));   // 화면이 가려져 비행 프레임을 놓쳤어도 도착점은 그린다
     if(!game.contacted) absCross={X:rec.x, Y:rec.z, strike:absJudge(rec.x,rec.z)};
     const [main,sub0]=RESULT_TXT[rec.result];
+    if(game.mode==='practice'){ onArrivePractice(rec, main, sub0); return; }
+    const why = effectReason(rec.effect, true);
     const exTxt = rec.expect ? '타자는 '+E.GROUP_KO[rec.expect.group]+' '+zoneName(rec.expect.zone)+' 노림' : '';
     let text=main, subText=sub0 ? sub0+' · '+exTxt : exTxt, col=RESULT_COL[rec.result];
+    if(why) text += '<span class="eff">'+why+'</span>';
     if(rec.outcome){
       const runs=E.applyOutcome(inn, rec.outcome);
-      if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]; col=RESULT_COL[rec.outcome]; }
+      if(rec.outcome==='walk'||rec.outcome==='strikeout'){ text=RESULT_TXT[rec.outcome][0]+(why?'<span class="eff">'+why+'</span>':''); col=RESULT_COL[rec.outcome]; }
       const status=E.gameStatus(game.g);
       subText = (runs ? runs+'실점 · '+game.g.us+':'+(game.g.them+inn.runs) : inn.outs+'아웃') + (exTxt ? ' · '+exTxt : '');
       if(status==='win'||status==='lose'||status==='draw'){
@@ -2785,6 +2905,107 @@ return {
     showMsg(text, subText, col);
     game.phase='ready';
     updateHUD();
+  }
+
+  // ═════ 연습 모드: 앞 공과 비교해 이 공이 타자에게 어떻게 보였나 ═════
+  function newPractice(){
+    game.mode='practice';
+    $('game-hud').classList.add('practice');
+    $('hand-wrap').style.display='flex'; $('bat-btn').style.display='block';
+    game.g=null; game.inning={inning:0,outs:0,bases:[false,false,false],runs:0};   // enterGame 이 새 게임으로 착각하지 않게
+    game.scout=[]; game.batterIdx=0; game.prev=null; game.ghost=null; game.pred=null;
+    game.pa=E.startPA(curHands());
+    game.rec=null; game.hit=null; game.entry=null; game.contacted=false; game.entered=false;
+    game.phase='ready'; game.aimZone=null; gameAim=null; $('throw-btn').disabled=true;
+    throwT=-1; path=[]; pathDone=false; absCross=null;
+    updateMatchup();
+    cur=GAME_PITCH_MAP[gamePitch]; updateInfo();
+    $('game-end').style.display='none';
+    showMsg('구종 고르고 존을 누르면 확률이 나와요', '두 번째 공부터 앞 공과 비교한 효과가 붙어요', '#aab2c0');
+    updateHUD();
+  }
+  function onPracticeHands(){
+    if(game.mode!=='practice'){ return; }
+    game.prev=null; game.ghost=null; game.rec=null;
+    game.pa=E.startPA(curHands());
+    path=[]; pathDone=false; absCross=null;
+    showMsg('좌우를 바꿨어요 — 앞 공 기록은 지웠어요', '', '#aab2c0');
+    if(game.aimZone) showPrediction(game.aimZone);
+    updateHUD();
+  }
+  const pct=(v)=>Math.round(v*100)+'%';
+  function probLine(p){ return '헛스윙 '+pct(p.whiff)+' · 안타 '+pct(p.single+p.double+p.hr); }
+  // 효과를 한 줄로. short=true 면 게임 배너용으로 짧게
+  function effectReason(ef, short){
+    if(!ef) return '';
+    const parts=[];
+    if(ef.dv!==undefined){
+      if(ef.dv>=8) parts.push(PT_KO[ef.prev]+' 뒤 '+ef.dv+'km/h 느림 → 타이밍');
+      else if(ef.dv<=-8) parts.push(PT_KO[ef.prev]+' 뒤 '+(-ef.dv)+'km/h 빨라짐');
+      if(ef.tunnel>=0.5) parts.push('7m까지 앞 공과 '+Math.round(ef.sepDec*100)+'cm 차이 → 같은 공처럼');
+      if(short && ef.Dc!==undefined && ef.Dc<-0.25 && parts.length===0) parts.push('앞 공과 비슷해서 눈에 익음');
+    }
+    if(ef.away>=0.25) parts.push('타자에게서 멀어지는 공');
+    else if(ef.away<=-0.2) parts.push('타자 몸쪽으로 파고드는 공');
+    return (short ? parts.slice(0,2) : parts).join(' · ');
+  }
+  function showPrediction(zone){
+    const aim=E.zoneTarget(zone);
+    game.pa.hands=curHands();
+    const r=E.pitchProbs(TABLE, game.pa, {pitchType:gamePitch, zone:zone}, {zone:zone, x:aim.x, z:aim.z}, {ai:false, prev:game.prev||null});
+    const ef=r.effect;
+    let main=PT_KO[gamePitch]+' '+zoneName(zone)+' — '+probLine(r.p);
+    let sub;
+    if(ef.Dc===undefined) sub='첫 공이라 앞 공 효과 없음'+(effectReason(ef)?' · '+effectReason(ef):'');
+    else {
+      const d=Math.round((r.p.whiff-r.p0.whiff)*100);
+      sub='앞 공 효과: 헛스윙 '+pct(r.p0.whiff)+' → '+pct(r.p.whiff)+' ('+(d>=0?'+':'')+d+') · '+(effectReason(ef)||'효과 거의 없음');
+    }
+    showMsg(main, sub, '#aab2c0');
+  }
+  function onArrivePractice(rec, main, sub0){
+    let text=main;
+    const pr=game.pred, ef=rec.effect;
+    const lines=[];
+    if(ef && ef.dv!==undefined){
+      lines.push(PT_KO[ef.prev]+' '+ef.prevV+' → '+PT_KO[rec.pitchType]+' '+ef.v+'km/h ('+(ef.dv>0?'−':'+')+Math.abs(ef.dv)+')');
+      lines.push('7m 지점 간격 '+Math.round(ef.sepDec*100)+'cm → 도착 간격 '+Math.round(ef.sepPlate*100)+'cm');
+    }
+    if(pr) lines.push('이 공 '+probLine(pr.p)+(pr.effect.Dc!==undefined?' (효과 전 헛스윙 '+pct(pr.p0.whiff)+')':''));
+    const why=effectReason(ef);
+    if(why) text+='<span class="eff">'+why+'</span>';
+    if(rec.outcome){
+      text=RESULT_TXT[rec.outcome][0]+' — 새 타석'+(why?'<span class="eff">'+why+'</span>':'');
+      game.pa=E.startPA(curHands());
+    }
+    showMsg(text, lines.join(' · '), RESULT_COL[rec.outcome||rec.result]);
+    game.phase='ready';
+    updateHUD();
+  }
+  // 앞 공 궤적(회색 점선) + 7m 판단 지점 두 공 위치
+  function drawGhost(){
+    const g=game.ghost, sgn=lefty?-1:1;
+    const gp=Object.assign({}, GAME_PITCH_MAP[g.pitchType], {ax:g.x*sgn, ay:g.z});
+    ctx.save();
+    ctx.strokeStyle='rgba(200,210,225,0.55)'; ctx.lineWidth=2; ctx.setLineDash([5,5]);
+    ctx.beginPath();
+    for(let i=0;i<=48;i++){ const w=ballWorldFor(gp,i/48,0); const p=proj(w.X,w.Y,Math.max(w.d,-CAM_BEHIND*0.3)); i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); }
+    ctx.stroke(); ctx.setLineDash([]);
+    // 앞 공 도착점
+    const pe=proj(g.x,g.z,0);
+    ctx.strokeStyle='rgba(200,210,225,0.7)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(pe.x,pe.y,Math.max(4,BALL_R_M*pe.s),0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='rgba(200,210,225,0.85)'; ctx.font='700 10px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText('앞 공 '+PT_KO[g.pitchType], pe.x, pe.y+Math.max(4,BALL_R_M*pe.s)+12);
+    // 7m 판단 지점
+    const tDec=1-E.DECEPT.decisionM/RELEASE_D;
+    const a=ballWorldFor(gp,tDec,0), b=ballWorldFor(cur,tDec,knSeed);
+    const pa=proj(a.X,a.Y,a.d), pb=proj(b.X,b.Y,b.d);
+    ctx.strokeStyle='rgba(200,210,225,0.9)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(pa.x,pa.y,6,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle=cur.color; ctx.beginPath(); ctx.arc(pb.x,pb.y,6,0,Math.PI*2); ctx.stroke();
+    const sep=Math.round(Math.hypot(a.X-b.X,a.Y-b.Y)*100);
+    ctx.fillStyle='#fff'; ctx.font='800 10.5px -apple-system,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('7m 판단 지점 · '+sep+'cm', Math.max(pa.x,pb.x)+10, (pa.y+pb.y)/2+4);
+    ctx.restore();
   }
 
   function showEnd(){

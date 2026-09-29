@@ -414,6 +414,63 @@ function applyExpectation(p, m, m0, strength) {
   return q;
 }
 
+// ---------- 구종 물리 · 속이기 효과 ----------
+// 도감 궤적과 같은 값. v km/h, bx 좌우 변화 m (+ = 팔쪽, - = 글러브쪽), mv 상하 변화 m (+ = 덜 떨어짐), shape = 꺾이는 시점
+const PHYS = {
+  FF: { v: 150, bx: 0,     mv: 0.40,  shape: 'gradual' },
+  SI: { v: 144, bx: 0.28,  mv: 0.10,  shape: 'gradual' },
+  FC: { v: 143, bx: -0.14, mv: 0.30,  shape: 'late' },
+  SL: { v: 135, bx: -0.35, mv: 0.05,  shape: 'late' },
+  ST: { v: 125, bx: -0.55, mv: 0.10,  shape: 'gradual' },
+  CU: { v: 118, bx: -0.28, mv: -0.45, shape: 'early' },
+  KC: { v: 128, bx: -0.22, mv: -0.48, shape: 'early' },
+  CH: { v: 128, bx: 0.20,  mv: 0.12,  shape: 'gradual' },
+  FS: { v: 138, bx: 0,     mv: -0.05, shape: 'late' },
+  SV: { v: 130, bx: -0.40, mv: -0.28, shape: 'gradual' },
+};
+const REL = { d: 17.0, h: 1.75, x: 0.45 };   // 릴리스 → 플레이트 거리, 높이, 좌우 (도감과 같음)
+function moveExp(shape) { return shape === 'late' ? 3.65 : shape === 'early' ? 1.38 : 2.05; }
+// 투수 손 pH 로 (x,z) 에 도착한 공의 비행 진행 tN(0~1) 위치. x 는 포수 시점 (+ = 1루쪽)
+function pitchPos(code, pH, x, z, tN) {
+  const p = PHYS[code], sgn = pH === 'L' ? -1 : 1, T = REL.d / (p.v / 3.6), gd = 0.5 * 9.81 * T * T;
+  const relX = -REL.x * sgn, b = -p.bx * sgn;          // 우투수 팔쪽 = 화면 왼쪽
+  const m = Math.pow(tN, moveExp(p.shape));
+  return { x: relX + (x - relX) * tN + b * (m - tN), z: REL.h + (z - REL.h + gd) * tN - gd * tN * tN + p.mv * (m - tN) };
+}
+// 타자에게서 멀어지는 좌우 변화 (m, + = 멀어짐). 같은 손이면 글러브쪽이, 반대 손이면 팔쪽이 멀어지는 쪽
+function awayBreak(code, pH, bH) { const bx = PHYS[code].bx; return pH === bH ? -bx : bx; }
+
+const DECEPT = {
+  decisionM: 7.0,     // 타자가 휘두를지 정하는 지점 (플레이트 앞 m)
+  timingFull: 30,     // 앞 공보다 이만큼 느리면 타이밍 효과 최대 (km/h). 빨라지면 절반만
+  tunnelSame: 0.15,   // 판단 지점에서 앞 공과 이보다 가까우면 "같은 공처럼 보임" (m)
+  tunnelSplit: 0.30,  // 그러다 도착점이 이만큼 벌어지면 터널 효과 최대 (m)
+  wTiming: 1.0, wTunnel: 0.8,
+  strength: 1.0,
+  effect: { take: -0.25, whiff: 0.75, foul: 0.1, out: 0.15, single: -0.45, double: -0.6, hr: -0.8 },
+  // 구종별 평균 효과 — 실측 확률표에 이미 "평균적인 볼배합"이 들어 있으므로 빼고 쓴다 (sim 으로 구함)
+  base: {"FF":0.349,"SI":0.336,"FC":0.339,"SL":0.449,"ST":0.678,"CU":0.863,"KC":0.602,"CH":0.589,"FS":0.411,"SV":0.565},
+};
+// 앞 공(prev)과 이번 공(cur)을 타자 눈으로 비교. prev/cur = { pitchType, x, z }
+function deception(prev, cur, pH) {
+  const dv = PHYS[prev.pitchType].v - PHYS[cur.pitchType].v;
+  const timing = dv > 0 ? Math.min(1, dv / DECEPT.timingFull) : Math.min(1, -dv / DECEPT.timingFull) * 0.5;
+  const tDec = 1 - DECEPT.decisionM / REL.d;
+  const a = pitchPos(prev.pitchType, pH, prev.x, prev.z, tDec), b = pitchPos(cur.pitchType, pH, cur.x, cur.z, tDec);
+  const sepDec = Math.hypot(a.x - b.x, a.z - b.z);
+  const sepPlate = Math.hypot(prev.x - cur.x, prev.z - cur.z);
+  const look = sepDec <= DECEPT.tunnelSame ? 1 : Math.max(0, 1 - (sepDec - DECEPT.tunnelSame) / 0.2);
+  const tunnel = look * Math.max(0, Math.min(1, (sepPlate - sepDec) / DECEPT.tunnelSplit));
+  const D = DECEPT.wTiming * timing + DECEPT.wTunnel * tunnel;
+  return { dv, timing, sepDec, sepPlate, tunnel, D };
+}
+function applyDeception(p, Dc) {
+  const q = {}; let s = 0;
+  for (const r of PROB_KEYS) { q[r] = p[r] * Math.exp(DECEPT.effect[r] * Dc * DECEPT.strength); s += q[r]; }
+  for (const r of PROB_KEYS) q[r] /= s;
+  return q;
+}
+
 // ---------- 타석 (투구 하나씩) ----------
 function startPA(hands) {
   return { balls: 0, strikes: 0, hands, history: [], outcome: null };
@@ -424,14 +481,12 @@ function startPA(hands) {
 //       judge(x, z) → true=스트라이크 : 안 휘두른 공의 볼/루킹을 가르는 판정 (도감 ABS를 넘겨줌)
 //       ai (기본 true) 타자 노림 켜기, scout: 이 이닝의 투구 기록 배열 (넘기면 여기에 쌓임), expect: 노림을 직접 지정
 // 반환 rec: { pitchType, aim, zone, x, z, result, count, outcome, expect, match, swung }  outcome 은 타석이 끝났을 때만
-function throwPitch(table, st, pick, opts = {}) {
+// 한 공의 결과 확률 (뽑기 전). land = 실제 도착 {zone,x,z}. 반환 { p, p0, expect, match, effect }
+//   p0 = 앞 공 효과를 빼고 계산한 확률 (연습 모드에서 "효과 전 → 후" 비교용)
+//   opts.prev = 타자가 바로 앞에 본 공 {pitchType,x,z} (없으면 이번 타석 직전 공)
+function pitchProbs(table, st, pick, land, opts = {}) {
   const rng = opts.rng || Math.random;
-  const wobble = opts.wobble !== false;
   const countAdjust = opts.countAdjust !== false && table.countAdj;
-
-  const aimPt = zoneTarget(pick.zone);
-  const land = wobble ? applyWobble(pick.pitchType, pick.zone, rng, opts.wobbleScale)
-                      : { zone: pick.zone, x: aimPt.x, z: aimPt.z };
   const key = `${pick.pitchType}|${land.zone}|${st.hands}`;
   let p = table.probs[key];
   if (countAdjust) p = adjustByCount(p, table.countAdj, st.balls, st.strikes, land.zone);
@@ -445,6 +500,26 @@ function throwPitch(table, st, pick, opts = {}) {
   }
   if (opts.batter) p = applyBatter(p, opts.batter);
   p = applyDifficulty(p);
+  const p0 = p;
+  const pH = st.hands[0], bH = st.hands[1];
+  const effect = { away: awayBreak(pick.pitchType, pH, bH), v: PHYS[pick.pitchType].v };
+  const prev = opts.prev !== undefined ? opts.prev : st.history[st.history.length - 1];
+  if (prev && opts.deceive !== false) {
+    Object.assign(effect, deception(prev, { pitchType: pick.pitchType, x: land.x, z: land.z }, pH));
+    effect.prev = prev.pitchType; effect.prevV = PHYS[prev.pitchType].v;
+    effect.Dc = effect.D - (DECEPT.base[pick.pitchType] || 0);
+    p = applyDeception(p, effect.Dc);
+  }
+  return { p, p0, expect, match, effect };
+}
+
+function throwPitch(table, st, pick, opts = {}) {
+  const rng = opts.rng || Math.random;
+  const wobble = opts.wobble !== false;
+  const aimPt = zoneTarget(pick.zone);
+  const land = wobble ? applyWobble(pick.pitchType, pick.zone, rng, opts.wobbleScale)
+                      : { zone: pick.zone, x: aimPt.x, z: aimPt.z };
+  const { p, expect, match, effect } = pitchProbs(table, st, pick, land, opts);
   let result = sampleResult(p, rng);
   if (result === 'take') {
     const strike = opts.judge ? opts.judge(land.x, land.z) : land.zone <= 9;
@@ -453,7 +528,7 @@ function throwPitch(table, st, pick, opts = {}) {
 
   const rec = { pitchType: pick.pitchType, aim: pick.zone, zone: land.zone, x: land.x, z: land.z,
                 result, count: `${st.balls}-${st.strikes}`, outcome: null,
-                expect, match, swung: result !== 'ball' && result !== 'called' };
+                expect, match, effect, swung: result !== 'ball' && result !== 'called' };
 
   if (IN_PLAY.has(result)) rec.outcome = result;
   else if (result === 'ball') { st.balls++; if (st.balls === 4) rec.outcome = 'walk'; }
@@ -644,6 +719,7 @@ return {
   buildTable, buildCountAdjust, adjustByCount, sampleResult,
   SCORE_W, pitcherScore, zoneScores, matchupRating, prevAdvice,
   GROUP, GROUPS, GROUP_KO, AI, BATTER_TYPES, TEAMS, LINEUP, applyBatter, batSide, chooseExpectation, matchScore, baselineMatch, applyExpectation,
+  PHYS, REL, DECEPT, pitchPos, awayBreak, deception, applyDeception, pitchProbs,
   startPA, throwPitch, simulatePA,
   RUNNER_RULES, START, EXTRA_START, MAX_INNING, startInning, startGame, gameStatus, nextInning,
   applyOutcome, inningOver, simulateGame, simulateInning,
